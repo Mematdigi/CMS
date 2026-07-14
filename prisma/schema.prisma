@@ -1,0 +1,434 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// User role enum definition
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  TEAM_LEADER
+  SALES_EXECUTIVE
+  VIEWER
+}
+
+// Lead statuses lifecycle
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+  CLOSED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// 1. Tenant (Multi-Tenancy Organization)
+model Tenant {
+  id            String         @id @default(uuid()) @map("_id")
+  name          String
+  subdomain     String         @unique
+  logoUrl       String?
+  brandingColor String?        @default("#3b82f6")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  isDeleted     Boolean        @default(false)
+  deletedAt     DateTime?
+
+  workspaces    Workspace[]
+  users         User[]
+  leads         Lead[]
+  campaigns     Campaign[]
+  products      Product[]
+  departments   Department[]
+  auditLogs     AuditLog[]
+  settings      Settings?
+}
+
+// 2. Workspace (Regional or Business Unit partitioning within Tenant)
+model Workspace {
+  id        String    @id @default(uuid()) @map("_id")
+  tenantId  String
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teams     Team[]
+  leads     Lead[]
+
+  @@index([tenantId])
+}
+
+// 3. Team (Sales groups or departments within Workspace)
+model Team {
+  id          String    @id @default(uuid()) @map("_id")
+  workspaceId String
+  name        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  memberIds   String[]
+  members     User[]    @relation("TeamMembers", fields: [memberIds], references: [id])
+
+  @@index([workspaceId])
+}
+
+// 4. User System
+model User {
+  id           String    @id @default(uuid()) @map("_id")
+  tenantId     String
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         UserRole  @default(SALES_EXECUTIVE)
+  isActive     Boolean   @default(true)
+  is2faEnabled Boolean   @default(false)
+  twoFactorSec String?
+  timezone     String    @default("UTC")
+  language     String    @default("en")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
+
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  teamIds      String[]
+  teams        Team[]    @relation("TeamMembers", fields: [teamIds], references: [id])
+  
+  employee     Employee?
+
+  // Audit and Ownership links
+  createdLeads      Lead[]            @relation("LeadCreatedBy")
+  assignedLeads     Lead[]            @relation("LeadAssignedEmployee")
+  createdTasks      Task[]            @relation("TaskCreatedBy")
+  assignedTasks     Task[]            @relation("TaskAssignedTo")
+  followups         Followup[]
+  callLogs          CallLog[]
+  whatsappMessages  WhatsappMessage[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  bookmarks         Bookmark[]
+  savedFilters      SavedFilter[]
+
+  @@index([tenantId])
+}
+
+// 5. Employee Detail Extensions (Targets, Leaves, Attendance)
+model Employee {
+  id              String    @id @default(uuid()) @map("_id")
+  userId          String    @unique
+  departmentId    String?
+  targetMonthly   Float     @default(0.0)
+  conversionRate  Float     @default(0.0)
+  attendanceCount Int       @default(0)
+  leaveBalance    Int       @default(30)
+  documents       String[]  // Array of Cloudinary Attachment URLs
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+}
+
+// 6. Lead Model
+model Lead {
+  id           String     @id @default(uuid()) @map("_id")
+  tenantId     String
+  workspaceId  String
+  name         String
+  phone        String
+  altPhone     String?
+  email        String
+  company      String?
+  industry     String?
+  productId    String?
+  budget       Float?
+  leadSource   String?
+  campaignId   String?
+  status       LeadStatus @default(NEW)
+  priority     Priority   @default(MEDIUM)
+  createdById  String
+  assignedToId String?
+  state        String?
+  city         String?
+  country      String?
+  language     String     @default("en")
+  notes        String?
+  attachments  String[]
+  score        Int        @default(50) // AI Lead Score (1-100)
+  createdAt    DateTime?  @default(now())
+  updatedAt    DateTime?  @updatedAt
+  isDeleted    Boolean    @default(false)
+  deletedAt    DateTime?
+
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User       @relation("LeadCreatedBy", fields: [createdById], references: [id])
+  assignedTo   User?      @relation("LeadAssignedEmployee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  campaign     Campaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  activities   LeadActivity[]
+  followups    Followup[]
+  tasks        Task[]
+  callLogs     CallLog[]
+  whatsappMsgs WhatsappMessage[]
+  bookmarks    Bookmark[]
+  customFields CustomFieldValue[]
+
+  @@index([tenantId, workspaceId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([phone])
+  @@index([email])
+}
+
+// 7. Lead Custom Fields System (Allows Ad-hoc Custom Fields dynamically)
+model CustomField {
+  id          String   @id @default(uuid()) @map("_id")
+  tenantId    String
+  fieldName   String
+  fieldType   String   // "text", "number", "date", "dropdown"
+  options     String[] // Dropdown options if applicable
+  createdAt   DateTime @default(now())
+
+  values      CustomFieldValue[]
+}
+
+model CustomFieldValue {
+  id            String      @id @default(uuid()) @map("_id")
+  leadId        String
+  customFieldId String
+  value         String
+
+  lead          Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, customFieldId])
+}
+
+// 8. Lead Activity Timeline & Log
+model LeadActivity {
+  id          String   @id @default(uuid()) @map("_id")
+  leadId      String
+  userId      String?
+  action      String   // "STATUS_CHANGE", "NOTE_ADDED", "CALL_LOGGED", "WHATSAPP_SENT"
+  details     String   // Plain text JSON string describing the change payload
+  createdAt   DateTime @default(now())
+
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+}
+
+// 9. Followup Calendar Reminders
+model Followup {
+  id          String   @id @default(uuid()) @map("_id")
+  leadId      String
+  userId      String
+  dateTime    DateTime
+  isRecurring Boolean  @default(false)
+  recurrence  String?  // "DAILY", "WEEKLY", "MONTHLY"
+  status      String   @default("PENDING") // "PENDING", "COMPLETED", "OVERDUE"
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dateTime])
+  @@index([leadId])
+}
+
+// 10. Task Entity
+model Task {
+  id           String    @id @default(uuid()) @map("_id")
+  leadId       String?
+  createdById  String
+  assignedToId String
+  title        String
+  description  String?
+  priority     Priority  @default(MEDIUM)
+  status       String    @default("TODO") // "TODO", "IN_PROGRESS", "DONE"
+  dueDate      DateTime
+  attachments  String[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lead         Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdBy    User      @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  assignedTo   User      @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+
+  @@index([assignedToId, dueDate])
+}
+
+// 11. Cloud Telephony Integration Logs (Fortius Ready)
+model CallLog {
+  id           String   @id @default(uuid()) @map("_id")
+  leadId       String
+  userId       String
+  durationSec  Int
+  recordingUrl String?
+  callType     String   // "INCOMING", "OUTGOING", "MISSED"
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([userId])
+}
+
+// 12. WhatsApp Business Messaging Logs
+model WhatsappMessage {
+  id            String   @id @default(uuid()) @map("_id")
+  leadId        String
+  userId        String
+  messageBody   String
+  mediaUrl      String?
+  direction     String   // "INBOUND", "OUTBOUND"
+  status        String   // "SENT", "DELIVERED", "READ", "FAILED"
+  templateName  String?
+  createdAt     DateTime @default(now())
+
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+}
+
+// 13. Notifications Center
+model Notification {
+  id         String   @id @default(uuid()) @map("_id")
+  userId     String
+  title      String
+  message    String
+  isRead     Boolean  @default(false)
+  linkUrl    String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+// 14. Campaigns (Marketing channels)
+model Campaign {
+  id        String   @id @default(uuid()) @map("_id")
+  tenantId  String
+  name      String
+  source    String   // "Google Ads", "Facebook Ads", "Newsletter"
+  budget    Float
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads     Lead[]
+
+  @@index([tenantId])
+}
+
+// 15. Product Offerings
+model Product {
+  id          String   @id @default(uuid()) @map("_id")
+  tenantId    String
+  name        String
+  price       Float
+  description String?
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads     Lead[]
+
+  @@index([tenantId])
+}
+
+// 16. Department partitioning
+model Department {
+  id        String     @id @default(uuid()) @map("_id")
+  tenantId  String
+  name      String
+  createdAt DateTime   @default(now())
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@index([tenantId])
+}
+
+// 17. Security & Operation Audit Logs
+model AuditLog {
+  id        String   @id @default(uuid()) @map("_id")
+  tenantId  String
+  userId    String
+  action    String   // "LOGIN", "EXPORT", "LEAD_UPDATE", "LEAD_DELETE", "ASSIGNMENT_RULE_TRIGGER"
+  ipAddress String
+  details   String   // JSON string of changes
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+// 18. Tenant Master Config Settings
+model Settings {
+  id                    String   @id @default(uuid()) @map("_id")
+  tenantId              String   @unique
+  assignmentMode        String   @default("MANUAL") // "ROUND_ROBIN", "MANUAL", "RULES"
+  rulesJson             String?  // JSON configs for location, product rules, and language mapping
+  emailTemplateJson     String?  // Saved system templates
+  whatsappTemplateJson  String?  // Approved templates details
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// 19. User Bookmark references
+model Bookmark {
+  id        String   @id @default(uuid()) @map("_id")
+  userId    String
+  leadId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leadId])
+}
+
+// 20. Saved Search Filters
+model SavedFilter {
+  id        String   @id @default(uuid()) @map("_id")
+  userId    String
+  name      String
+  filters   String   // JSON object detailing the query params
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
