@@ -8,7 +8,7 @@ export const runtime = "nodejs";
  * Generates a Twilio Access Token with Voice grant.
  * The browser Twilio Voice SDK uses this to authenticate and place outbound calls.
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     const AccessToken = twilio.default.jwt.AccessToken;
     const VoiceGrant = AccessToken.VoiceGrant;
 
-    const identity = (session.user as any).id || "crm-agent";
+    const identity = (session.user as { id: string }).id || "crm-agent";
 
     const voiceGrant = new VoiceGrant({
       outgoingApplicationSid: twimlAppSid,
@@ -54,8 +54,9 @@ export async function GET(request: Request) {
       token: token.toJwt(),
       identity,
     });
-  } catch (error: any) {
-    console.error("[Calls Token] Error generating token:", error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Calls Token] Error generating token:", message);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

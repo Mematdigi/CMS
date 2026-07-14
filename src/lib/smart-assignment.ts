@@ -6,7 +6,30 @@ export interface AssignmentRule {
   assignToUserId: string;
 }
 
-export async function evaluateSmartAssignment(lead: any): Promise<{ userId: string; userName: string }> {
+export interface SmartAssignmentLead {
+  name: string;
+  phone: string;
+  email: string;
+  company?: string;
+  industry?: string;
+  productId?: string;
+  productName?: string;
+  budget?: number;
+  leadSource?: string;
+  campaign?: string;
+  state?: string;
+  city?: string;
+  country?: string;
+  language?: string;
+  notes?: string;
+  status?: string;
+  priority?: string;
+  assignedToId?: string;
+  assignedToName?: string;
+  [key: string]: unknown;
+}
+
+export async function evaluateSmartAssignment(lead: SmartAssignmentLead): Promise<{ userId: string; userName: string }> {
   // 1. Get settings rules
   const rules: AssignmentRule[] = [
     { field: "language", value: "Spanish", assignToUserId: "user-exec2" },

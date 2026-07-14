@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as zod from "zod";
@@ -8,12 +8,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Plus,
-  SlidersHorizontal,
   Download,
   Upload,
-  UserPlus,
-  Trash2,
-  Bookmark,
   Activity,
   Grid,
   List as ListIcon,
@@ -21,11 +17,16 @@ import {
   ChevronRight,
   AlertCircle,
   FileSpreadsheet,
-  CheckSquare,
-  HelpCircle,
   FolderOpen,
   Phone,
 } from "lucide-react";
+
+interface Employee {
+  id: string;
+  userId: string;
+  name: string;
+  role: string;
+}
 export interface Lead {
   id: string;
   tenantId: string;
@@ -84,7 +85,7 @@ export default function LeadsPage() {
   const { startCall, user } = useCRMStore();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   
   // Filter / Search states
   const [search, setSearch] = useState("");
@@ -137,7 +138,7 @@ export default function LeadsPage() {
   });
 
   // Fetch leads on mount / query state change
-  const fetchLeads = () => {
+  const fetchLeads = useCallback(() => {
     const params = new URLSearchParams({
       search,
       status: statusFilter,
@@ -156,11 +157,11 @@ export default function LeadsPage() {
         }
       })
       .catch(() => {});
-  };
+  }, [search, statusFilter, page]);
 
   useEffect(() => {
     fetchLeads();
-  }, [search, statusFilter, page]);
+  }, [fetchLeads]);
 
   // Lead Submission & Duplicate detection
   const onCreateLeadSubmit = async (data: LeadFormValues) => {
@@ -175,7 +176,7 @@ export default function LeadsPage() {
           );
           return;
         }
-      } catch (err) {}
+      } catch {}
     }
 
     try {
@@ -191,7 +192,7 @@ export default function LeadsPage() {
         reset();
         fetchLeads();
       }
-    } catch (err) {}
+    } catch {}
   };
 
   // Bulk execution
@@ -216,7 +217,7 @@ export default function LeadsPage() {
             body: JSON.stringify({ assignedToId: bulkAssigneeId }),
           });
         }
-      } catch (err) {}
+      } catch {}
     }
 
     setSelectedLeads([]);
@@ -252,7 +253,7 @@ export default function LeadsPage() {
               notes: "Imported via CSV template.",
             }),
           });
-        } catch (err) {}
+        } catch {}
       }
     }
 
@@ -269,7 +270,7 @@ export default function LeadsPage() {
       if (json.success) {
         exportToCSV(json.data, "Enterprise_CRM_Leads_Report");
       }
-    } catch (err) {}
+    } catch {}
   };
 
   const handleExportExcel = async () => {
@@ -279,7 +280,7 @@ export default function LeadsPage() {
       if (json.success) {
         exportToExcel(json.data, "Enterprise_CRM_Leads_Report");
       }
-    } catch (err) {}
+    } catch {}
   };
 
   const leadStatuses: Lead["status"][] = [

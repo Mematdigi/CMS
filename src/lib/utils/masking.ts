@@ -1,9 +1,19 @@
-export function maskLead(lead: any, role: string) {
+interface MaskableLead {
+  phone?: string | null;
+  altPhone?: string | null;
+  email?: string | null;
+  state?: string | null;
+  city?: string | null;
+  country?: string | null;
+  [key: string]: unknown;
+}
+
+export function maskLead<T>(lead: T, role: string): T {
   if (!lead) return lead;
   
   // Apply masking for SALES_EXECUTIVE and VIEWER roles
   if (role === "SALES_EXECUTIVE" || role === "VIEWER") {
-    const masked = { ...lead };
+    const masked = { ...lead } as unknown as MaskableLead;
     
     if (masked.phone) {
       // Show only last 4 digits, replace rest with '*'
@@ -35,13 +45,13 @@ export function maskLead(lead: any, role: string) {
     if (masked.city) masked.city = "[Hidden]";
     if (masked.country) masked.country = "[Hidden]";
     
-    return masked;
+    return masked as unknown as T;
   }
   
   return lead;
 }
 
-export function maskLeadsArray(leads: any[], role: string) {
+export function maskLeadsArray<T>(leads: T[], role: string): T[] {
   if (!leads) return [];
   return leads.map((lead) => maskLead(lead, role));
 }

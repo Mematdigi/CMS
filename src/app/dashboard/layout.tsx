@@ -4,7 +4,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useCRMStore, CRMNotification } from "@/lib/store/useCRMStore";
+import { useCRMStore } from "@/lib/store/useCRMStore";
+import type { Device, Call } from "@twilio/voice-sdk";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -24,7 +25,6 @@ import {
   LogOut,
   User as UserIcon,
   Volume2,
-  VolumeX,
   PhoneOff,
   UserCheck,
   ChevronRight,
@@ -71,12 +71,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-    } catch (err) { }
+    } catch { }
   };
 
   // Twilio Client browser device state
-  const [twilioDevice, setTwilioDevice] = useState<any>(null);
-  const [activeConnection, setActiveConnection] = useState<any>(null);
+  const [twilioDevice, setTwilioDevice] = useState<Device | null>(null);
+  const [activeConnection, setActiveConnection] = useState<Call | null>(null);
   const callTriggeredRef = useRef<string | null>(null);
 
   // Auth Guard: Redirect if unauthenticated
@@ -84,12 +84,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (status === "unauthenticated") {
       router.push("/login");
     } else if (status === "authenticated" && session?.user) {
+      const user = session.user as { id?: string; role?: string; tenantId?: string };
       setUser({
-        id: (session.user as any).id || "user-admin",
+        id: user.id || "user-admin",
         name: session.user.name || "Default User",
         email: session.user.email || "user@enterprise.com",
-        role: (session.user as any).role || "ADMIN",
-        tenantId: (session.user as any).tenantId || "tenant-1",
+        role: user.role || "ADMIN",
+        tenantId: user.tenantId || "tenant-1",
       });
     }
   }, [status, session, router, setUser]);
@@ -97,6 +98,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Initialize Twilio WebRTC browser client device
   useEffect(() => {
     if (status !== "authenticated" || typeof window === "undefined" || !session?.user) return;
+
+    let deviceInstance: Device | null = null;
 
     fetch("/api/calls/token")
       .then((res) => res.json())
@@ -106,20 +109,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return;
         }
 
-        const { Device } = await import("@twilio/voice-sdk");
-        const device = new Device(data.token, {
+        const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
+        const device = new TwilioDevice(data.token, {
           logLevel: "warn",
         });
+        deviceInstance = device;
 
         device.on("registered", () => {
           console.log("[Twilio Client] Browser device registered successfully");
         });
 
-        device.on("error", (error: any) => {
+        device.on("error", (error: { message: string }) => {
           console.error("[Twilio Client] Device error:", error.message);
         });
 
-        device.on("incoming", (connection: any) => {
+        device.on("incoming", (connection: Call) => {
           console.log("[Twilio Client] Incoming WebRTC call received");
           setActiveConnection(connection);
           setIncomingCall({
@@ -149,11 +153,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       });
 
     return () => {
-      if (twilioDevice) {
-        twilioDevice.destroy();
+      if (deviceInstance) {
+        deviceInstance.destroy();
       }
     };
-  }, [status, session]);
+  }, [status, session, endCall, setIncomingCall]);
 
   // Load realistic notifications
   useEffect(() => {
@@ -169,13 +173,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Real-time Pusher WebSockets subscription
   useEffect(() => {
     if (status !== "authenticated" || !session?.user) return;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return;
 
     import("@/lib/pusher-client").then(({ pusherClient }) => {
       const channel = pusherClient.subscribe(`user-${userId}`);
 
-      channel.bind("notification:created", (data: any) => {
+      channel.bind("notification:created", (data: { title?: string; message?: string }) => {
         setNotifications([
           {
             id: `n-real-${Date.now()}`,
@@ -188,7 +192,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ]);
       });
 
-      channel.bind("call:incoming", (data: any) => {
+      channel.bind("call:incoming", (data: { leadId?: string; leadName?: string; phone?: string }) => {
         setIncomingCall({
           leadId: data.leadId || "lead-1",
           leadName: data.leadName || "Incoming Caller",
@@ -246,7 +250,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             To: activeCall.phone,
             leadId: activeCall.leadId,
           },
-        }).then((connection: any) => {
+        }).then((connection: Call) => {
           setActiveConnection(connection);
 
           connection.on("accept", () => {
@@ -260,12 +264,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             endCall();
           });
 
-          connection.on("error", (error: any) => {
+          connection.on("error", (error: { message: string }) => {
             console.error("[Twilio Client] Connection error:", error.message);
             setActiveConnection(null);
             endCall();
           });
-        }).catch((err: any) => {
+        }).catch((err: Error) => {
           console.error("[Twilio Client] Connection failed:", err);
           endCall();
         });
@@ -278,7 +282,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return () => clearTimeout(timer);
       }
     }
-  }, [activeCall, activeCall?.status, twilioDevice]);
+  }, [activeCall, activeCall?.status, twilioDevice, answerCall, endCall]);
 
   // Simulate an incoming call after 15 seconds of logging in
   useEffect(() => {
@@ -364,7 +368,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{session.user.name}</p>
                 <span className="text-[10px] bg-indigo-500/20 text-indigo-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider block w-max mt-1">
-                  {(session.user as any).role || "Sales Executive"}
+                  {(session.user as { role?: string }).role || "Sales Executive"}
                 </span>
               </div>
             </div>
@@ -646,7 +650,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             notes: "Customer call completed via click-to-call softphone.",
                           }),
                         });
-                      } catch (err) { }
+                      } catch { }
                       endCall();
                     }}
                     className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-2"

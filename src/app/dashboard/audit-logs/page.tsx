@@ -11,7 +11,7 @@ export interface AuditLog {
   createdAt: string;
 }
 import { getAuditLogsAction } from "@/lib/actions/crm.actions";
-import { ShieldCheck, Search, ShieldAlert, Cpu } from "lucide-react";
+import { Search } from "lucide-react";
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);

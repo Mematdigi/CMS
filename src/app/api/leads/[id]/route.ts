@@ -13,8 +13,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const role = (session.user as any).role || "SALES_EXECUTIVE";
-    const currentUserId = (session.user as any).id;
+    const user = session.user as { role?: string; id?: string };
+    const role = user.role || "SALES_EXECUTIVE";
+    const currentUserId = user.id;
     const { id } = await params;
     const lead = await LeadRepository.findById(id);
 
@@ -28,11 +29,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const maskedLead = {
       ...maskLead(lead, role),
-      assignedToName: (lead as any).assignedTo?.name || "Unassigned",
+      assignedToName: (lead as { assignedTo?: { name: string } | null }).assignedTo?.name || "Unassigned",
     };
     return NextResponse.json({ success: true, data: maskedLead });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -43,8 +45,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const role = (session.user as any).role || "SALES_EXECUTIVE";
-    const currentUserId = (session.user as any).id;
+    const user = session.user as { role?: string; id?: string };
+    const role = user.role || "SALES_EXECUTIVE";
+    const currentUserId = user.id;
     const { id } = await params;
     const body = await request.json();
 
@@ -57,7 +60,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 403 });
     }
 
-    let updateData = { ...body };
+    const updateData = { ...body };
     // Sales Executive or Viewer should not modify contact details
     if (role === "SALES_EXECUTIVE" || role === "VIEWER") {
       delete updateData.phone;
@@ -72,11 +75,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const updatedLead = await LeadRepository.update(id, updateData);
     const maskedUpdatedLead = {
       ...maskLead(updatedLead, role),
-      assignedToName: (updatedLead as any).assignedTo?.name || "Unassigned",
+      assignedToName: (updatedLead as { assignedTo?: { name: string } | null }).assignedTo?.name || "Unassigned",
     };
     return NextResponse.json({ success: true, data: maskedUpdatedLead });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -87,7 +91,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const role = (session.user as any).role || "SALES_EXECUTIVE";
+    const role = (session.user as { role?: string }).role || "SALES_EXECUTIVE";
     if (role === "SALES_EXECUTIVE" || role === "VIEWER") {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 403 });
     }
@@ -100,7 +104,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     await LeadRepository.delete(id);
     return NextResponse.json({ success: true, data: { id } });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

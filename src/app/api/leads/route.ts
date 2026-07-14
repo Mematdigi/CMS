@@ -14,8 +14,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const tenantId = (session.user as any).tenantId || "tenant-1";
-    const role = (session.user as any).role || "SALES_EXECUTIVE";
+    const user = session.user as { tenantId?: string; role?: string };
+    const tenantId = user.tenantId || "tenant-1";
+    const role = user.role || "SALES_EXECUTIVE";
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
@@ -33,12 +34,12 @@ export async function GET(request: Request) {
       page,
       limit,
       tenantId,
-      assignedToId: role === "SALES_EXECUTIVE" ? (session.user as any).id : undefined,
+      assignedToId: role === "SALES_EXECUTIVE" ? (session.user as { id: string }).id : undefined,
     });
 
-    const maskedData = maskLeadsArray(result.data, role).map((lead: any) => ({
+    const maskedData = maskLeadsArray(result.data, role).map((lead) => ({
       ...lead,
-      assignedToName: lead.assignedTo?.name || "Unassigned",
+      assignedToName: (lead as { assignedTo?: { name: string } | null }).assignedTo?.name || "Unassigned",
     }));
 
     return NextResponse.json({
@@ -53,9 +54,10 @@ export async function GET(request: Request) {
         },
       },
     });
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: message || "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -64,8 +66,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const tenantId = session?.user ? ((session.user as any).tenantId || "tenant-1") : "tenant-1";
-    const userId = session?.user ? ((session.user as any).id || "user-current") : "user-admin";
+    const user = session?.user as { tenantId?: string; id?: string } | undefined;
+    const tenantId = user ? (user.tenantId || "tenant-1") : "tenant-1";
+    const userId = user ? (user.id || "user-current") : "user-admin";
 
     const body = await request.json();
     const { name, phone, email, company, industry, productId, productName, budget, leadSource, campaign, state, city, country, language, notes } = body;
@@ -121,9 +124,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, data: newLead }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: message || "Internal Server Error" },
       { status: 500 }
     );
   }

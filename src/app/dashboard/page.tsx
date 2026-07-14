@@ -8,9 +8,7 @@ import {
   Clock,
   Phone,
   MessageSquare,
-  AlertCircle,
   CheckCircle,
-  FileText,
   DollarSign,
 } from "lucide-react";
 import {
@@ -45,8 +43,47 @@ const DEFAULT_CAMPAIGN_DATA = [
   { name: "Direct Marketing", cost: 5000, leads: 90, roi: "1.8x" },
 ];
 
+interface LeadSourceItem {
+  name: string;
+  value: number;
+}
+
+interface CampaignPerformanceItem {
+  name: string;
+  cost: number;
+  leads: number;
+  roi: string;
+}
+
+interface EmployeePerformanceItem {
+  name: string;
+  leads: number;
+  won: number;
+  rev: number;
+}
+
+interface ConversionFunnelItem {
+  stage: string;
+  value: number;
+}
+
+interface RevenueTrendItem {
+  name: string;
+  revenue: number;
+}
+
+interface AnalyticsData {
+  totalLeads: number;
+  totalRevenue: number;
+  employeePerformance: EmployeePerformanceItem[];
+  campaignPerformance: CampaignPerformanceItem[];
+  conversionFunnel: ConversionFunnelItem[];
+  revenueTrend: RevenueTrendItem[];
+  leadSourceData: LeadSourceItem[];
+}
+
 export default function DashboardPage() {
-  const [analytics, setAnalytics] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
 
   const fetchAnalytics = useCallback(() => {
     getDashboardAnalyticsAction()
@@ -97,7 +134,7 @@ export default function DashboardPage() {
       },
       {
         title: "Converted Deals (WON)",
-        value: (analytics?.conversionFunnel?.find((f: any) => f.stage === "WON")?.value ?? 0).toLocaleString(),
+        value: (analytics?.conversionFunnel?.find((f) => f.stage === "WON")?.value ?? 0).toLocaleString(),
         desc: "Average deal conversion indicator",
         icon: CheckCircle,
         color: "text-teal-500",
@@ -124,7 +161,7 @@ export default function DashboardPage() {
 
   const revenueData = useMemo(() => {
     if (!analytics?.revenueTrend) return [];
-    return analytics.revenueTrend.map((item: any) => ({
+    return analytics.revenueTrend.map((item) => ({
       name: item.name,
       Target: Math.round(item.revenue * 0.9),
       Actual: item.revenue,
@@ -137,7 +174,7 @@ export default function DashboardPage() {
 
   const funnelData = useMemo(() => {
     if (!analytics?.conversionFunnel) return [];
-    return analytics.conversionFunnel.map((item: any) => ({
+    return analytics.conversionFunnel.map((item) => ({
       stage: item.stage,
       count: item.value,
     }));
@@ -238,7 +275,7 @@ export default function DashboardPage() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {leadSourceData.map((entry: any, index: number) => (
+                  {leadSourceData.map((entry, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -260,7 +297,7 @@ export default function DashboardPage() {
                 <YAxis dataKey="stage" type="category" stroke="#64748b" fontSize={11} />
                 <Tooltip contentStyle={{ background: "#0f172a", border: "none", borderRadius: "12px", color: "#fff", fontSize: "12px" }} />
                 <Bar dataKey="count" fill="#6366f1" radius={[0, 8, 8, 0]}>
-                  {funnelData.map((entry: any, index: number) => (
+                  {funnelData.map((entry, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Bar>
@@ -302,7 +339,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {campaignData.map((camp: any, idx: number) => (
+              {campaignData.map((camp, idx: number) => (
                 <tr key={idx} className="border-b border-border text-sm hover:bg-secondary/10 transition-all">
                   <td className="p-4 font-semibold">{camp.name}</td>
                   <td className="p-4">${camp.cost.toLocaleString()}</td>

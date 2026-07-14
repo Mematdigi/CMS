@@ -12,12 +12,13 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const user = session.user as { id: string; role: string };
+    const userId = user.id;
     const calls = await CallRepository.findMany(
-      (session.user as any).role === "SALES_EXECUTIVE" ? userId : undefined
+      user.role === "SALES_EXECUTIVE" ? userId : undefined
     );
 
-    const mappedCalls = calls.map((call: any) => ({
+    const mappedCalls = calls.map((call) => ({
       id: call.id,
       leadId: call.leadId,
       leadName: call.lead?.name || "Unknown Lead",
@@ -30,8 +31,9 @@ export async function GET() {
     }));
 
     return NextResponse.json({ success: true, data: mappedCalls });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -42,7 +44,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const currentUserId = (session.user as any).id;
+    const currentUserId = (session.user as { id: string }).id;
     const body = await request.json();
     const { leadId, durationSec, notes, callType, recordingUrl } = body;
 
@@ -53,14 +55,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const newCall = (await CallRepository.create({
+    const newCall = await CallRepository.create({
       leadId,
       userId: currentUserId,
       durationSec: parseInt(durationSec, 10),
       callType,
       recordingUrl: recordingUrl || undefined,
       notes: notes || "",
-    })) as any;
+    });
 
     const mappedNewCall = {
       id: newCall.id,
@@ -75,7 +77,8 @@ export async function POST(request: Request) {
     };
 
     return NextResponse.json({ success: true, data: mappedNewCall }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

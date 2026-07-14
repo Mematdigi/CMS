@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Lead, WhatsappMessage } from "@prisma/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Search, CheckCheck, Paperclip, Smile, Mic, AlertCircle, FileText, Image as ImageIcon, Check, MessageSquare } from "lucide-react";
+import { Send, Search, CheckCheck, AlertCircle, FileText, Image as ImageIcon, Check, MessageSquare } from "lucide-react";
 
 const WHATSAPP_TEMPLATES = [
   { name: "welcome_template", body: "Hello {{name}}, welcome to Enterprise CRM! Let us know how we can support you." },
@@ -22,7 +22,7 @@ export default function WhatsappPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const loadLeads = () => {
+  const loadLeads = useCallback(() => {
     fetch("/api/leads?limit=100")
       .then((res) => res.json())
       .then((json) => {
@@ -34,9 +34,9 @@ export default function WhatsappPage() {
         }
       })
       .catch(() => {});
-  };
+  }, [selectedLead]);
 
-  const loadMessages = () => {
+  const loadMessages = useCallback(() => {
     if (!selectedLead) return;
     fetch(`/api/whatsapp?leadId=${selectedLead.id}`)
       .then((res) => res.json())
@@ -44,15 +44,15 @@ export default function WhatsappPage() {
         if (json.success) setMessages(json.data);
       })
       .catch(() => {});
-  };
+  }, [selectedLead]);
 
   useEffect(() => {
     loadLeads();
-  }, []);
+  }, [loadLeads]);
 
   useEffect(() => {
     loadMessages();
-  }, [selectedLead]);
+  }, [loadMessages]);
 
   // Scroll to bottom
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function WhatsappPage() {
       }, 3000); // refresh every 3s
     }
     return () => clearInterval(timer);
-  }, [selectedLead]);
+  }, [selectedLead, loadMessages]);
 
   const handleSendMessage = async (textToSend = inputText, templateName?: string) => {
     if (!textToSend.trim() || !selectedLead) return;
@@ -90,7 +90,7 @@ export default function WhatsappPage() {
         setShowTemplates(false);
         loadMessages();
       }
-    } catch (err) {}
+    } catch {}
   };
 
   const applyTemplate = (template: typeof WHATSAPP_TEMPLATES[0]) => {
@@ -113,7 +113,7 @@ export default function WhatsappPage() {
         }),
       });
       loadMessages();
-    } catch (err) {}
+    } catch {}
   };
 
   const handleSendSampleImage = async () => {
@@ -130,7 +130,7 @@ export default function WhatsappPage() {
         }),
       });
       loadMessages();
-    } catch (err) {}
+    } catch {}
   };
 
   const filteredLeads = leads.filter((l) =>
@@ -269,6 +269,7 @@ export default function WhatsappPage() {
                           {/* Image visual attachment */}
                           {msg.mediaUrl && !msg.mediaUrl.endsWith(".pdf") && (
                             <div className="mb-2 rounded-lg overflow-hidden border border-white/10">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={msg.mediaUrl} alt="whatsapp shared content" className="max-w-full h-auto object-cover max-h-40" />
                             </div>
                           )}

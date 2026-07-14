@@ -6,9 +6,9 @@ import {
   EmployeeRepository,
   AuditRepository,
   FollowupRepository,
-  TaskRepository,
 } from "@/lib/repositories/crm.repository";
 import { getPrisma } from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
 
 async function verifySession() {
   const session = await getServerSession(authOptions);
@@ -20,7 +20,7 @@ async function verifySession() {
 
 export async function getEmployeesAction() {
   const session = await verifySession();
-  const tenantId = (session.user as any).tenantId || "tenant-1";
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
   const employees = await EmployeeRepository.findMany(tenantId);
   
   // Format Decimal values to numbers for serialization
@@ -42,7 +42,7 @@ export async function getEmployeesAction() {
 
 export async function getAuditLogsAction() {
   const session = await verifySession();
-  const tenantId = (session.user as any).tenantId || "tenant-1";
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
   const logs = await AuditRepository.findMany(tenantId);
 
   return logs.map((log) => ({
@@ -62,7 +62,7 @@ export async function saveTenantSettingsAction(data: {
   assignmentMode: string;
 }) {
   const session = await verifySession();
-  const tenantId = (session.user as any).tenantId || "tenant-1";
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
 
   const prismaClient = getPrisma();
   await prismaClient.$transaction([
@@ -82,10 +82,11 @@ export async function saveTenantSettingsAction(data: {
 
 export async function getFollowupsAction() {
   const session = await verifySession();
-  const userId = (session.user as any).id;
+  const user = session.user as { id?: string; role?: string };
+  const userId = user.id;
 
   const followups = await FollowupRepository.findMany(
-    (session.user as any).role === "SALES_EXECUTIVE" ? userId : undefined
+    user.role === "SALES_EXECUTIVE" ? userId : undefined
   );
 
   return followups.map((f) => ({
@@ -109,7 +110,7 @@ export async function createFollowupAction(data: {
   notes?: string;
 }) {
   const session = await verifySession();
-  const userId = (session.user as any).id;
+  const userId = (session.user as { id: string }).id;
 
   const followup = await FollowupRepository.create({
     leadId: data.leadId,
@@ -134,7 +135,7 @@ export async function createFollowupAction(data: {
 
 export async function getDashboardAnalyticsAction() {
   const session = await verifySession();
-  const tenantId = (session.user as any).tenantId || "tenant-1";
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
 
   // 1. Total counts
   const totalLeads = await getPrisma().lead.count({
@@ -265,12 +266,12 @@ export async function createEmployeeAction(data: {
   role: string;
 }) {
   const session = await verifySession();
-  const currentRole = (session.user as any).role;
+  const currentRole = (session.user as { role?: string }).role;
   if (currentRole !== "ADMIN" && currentRole !== "SUPER_ADMIN") {
     throw new Error("Only admins can create new employees");
   }
 
-  const tenantId = (session.user as any).tenantId || "tenant-1";
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
 
   // Check if user already exists
   const existingUser = await getPrisma().user.findUnique({
@@ -287,7 +288,7 @@ export async function createEmployeeAction(data: {
       name: data.name,
       email: data.email.toLowerCase(),
       passwordHash: data.passwordHash,
-      role: data.role as any,
+      role: data.role as UserRole,
       isActive: true,
     },
   });

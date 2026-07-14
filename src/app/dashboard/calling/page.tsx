@@ -14,8 +14,7 @@ export interface CallLog {
   createdAt: string;
 }
 
-import { motion } from "framer-motion";
-import { Phone, PhoneCall, Volume2, Play, Pause, Trash2, ArrowUpRight, ArrowDownLeft, PhoneMissed, Search, MessageSquare } from "lucide-react";
+import { PhoneCall, Volume2, Play, Pause, ArrowUpRight, ArrowDownLeft, PhoneMissed, Search } from "lucide-react";
 
 export default function CallingPage() {
   const { startCall } = useCRMStore();
@@ -25,7 +24,6 @@ export default function CallingPage() {
 
   // Audio recording player simulation
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [audioProgress, setAudioProgress] = useState(0);
 
   const loadLogs = () => {
     fetch("/api/calls")
@@ -44,19 +42,11 @@ export default function CallingPage() {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (playingId) {
-      timer = setInterval(() => {
-        setAudioProgress((prev) => {
-          if (prev >= 100) {
-            setPlayingId(null);
-            return 0;
-          }
-          return prev + 10;
-        });
-      }, 500);
-    } else {
-      setAudioProgress(0);
+      timer = setTimeout(() => {
+        setPlayingId(null);
+      }, 5000); // Simulated playback finishes in 5s
     }
-    return () => clearInterval(timer);
+    return () => clearTimeout(timer);
   }, [playingId]);
 
   const handleKeyPress = (num: string) => {

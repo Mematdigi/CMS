@@ -12,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) {
       return NextResponse.json({ success: false, error: "User ID not found in session." }, { status: 400 });
     }
@@ -32,8 +32,9 @@ export async function GET() {
     }));
 
     return NextResponse.json({ success: true, data: mappedNotifications });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -67,7 +68,8 @@ export async function PATCH(request: Request) {
         createdAt: updatedNotification.createdAt.toISOString(),
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

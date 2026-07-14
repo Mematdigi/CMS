@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { pusherServer } from "@/lib/pusher";
 
@@ -61,7 +60,7 @@ export async function POST(request: Request) {
           leadName,
           phone: From,
         });
-      } catch (err) {
+      } catch {
         console.warn(`[Incoming Call] Failed to trigger WebSocket for user ${u.id}`);
       }
     }
@@ -86,7 +85,7 @@ export async function POST(request: Request) {
         const accountData = await accountRes.json();
         isTrial = accountData.type === "Trial";
       }
-    } catch (e) {
+    } catch {
       console.warn("[Incoming Call] Failed to check Twilio account type, defaulting to Trial rules.");
     }
 
@@ -115,8 +114,9 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "text/xml" },
     });
 
-  } catch (error: any) {
-    console.error("[Incoming Call Webhook] Error:", error.message);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Incoming Call Webhook] Error:", errorMessage);
     const fallbackTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice" language="en-IN">An error occurred. Connecting you directly.</Say>

@@ -12,7 +12,7 @@ const connection = {
 export const emailWorker = new Worker(
   "email-queue",
   async (job: Job) => {
-    const { to, subject, body } = job.data;
+    const { to, subject } = job.data;
     console.log(`[Worker: Email] Dispatching email to ${to}...`);
     console.log(`[Worker: Email] Sent successfully. Subject: ${subject}`);
     return { status: "sent" };

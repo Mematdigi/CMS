@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar as CalendarIcon, Clock, Plus, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, AlertCircle, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 export interface Followup {
   id: string;
   leadId: string;
@@ -76,13 +76,7 @@ export default function FollowupsPage() {
       setNotes("");
       setIsRecurring(false);
       loadData();
-    } catch (err) {}
-  };
-
-  const getStatusStyle = (status: string) => {
-    if (status === "OVERDUE") return "bg-red-500/10 text-red-500 border-red-500/20";
-    if (status === "COMPLETED") return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
-    return "bg-amber-500/10 text-amber-500 border-amber-500/20";
+    } catch {}
   };
 
   // Generate calendar days grid
@@ -309,7 +303,7 @@ export default function FollowupsPage() {
                     <label className="block font-bold text-slate-400 uppercase mb-1.5">Recurrence Schedule</label>
                     <select
                       value={recurrence}
-                      onChange={(e) => setRecurrence(e.target.value as any)}
+                      onChange={(e) => setRecurrence(e.target.value as "DAILY" | "WEEKLY" | "MONTHLY")}
                       className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none font-medium text-foreground"
                     >
                       <option value="DAILY">DAILY</option>

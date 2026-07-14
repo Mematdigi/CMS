@@ -1,5 +1,3 @@
-import axios from "axios";
-
 export interface TwilioCallPayload {
   leadPhone: string;
   agentPhone?: string;

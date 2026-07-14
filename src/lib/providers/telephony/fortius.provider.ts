@@ -52,11 +52,12 @@ export class FortiusTelephonyClient {
         success: false,
         error: response.data?.message || "Failed to trigger click-to-call bridge.",
       };
-    } catch (err: any) {
-      console.error("[Fortius VoIP Client] Error calling click-to-call API:", err.message);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[Fortius VoIP Client] Error calling click-to-call API:", message);
       return {
         success: false,
-        error: err.message,
+        error: message,
       };
     }
   }
@@ -75,7 +76,7 @@ export class FortiusTelephonyClient {
         return response.data.recording_url;
       }
       return null;
-    } catch (err) {
+    } catch {
       return null;
     }
   }

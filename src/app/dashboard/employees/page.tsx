@@ -45,7 +45,7 @@ export default function EmployeesPage() {
 
   const isAdmin =
     session?.user &&
-    ((session.user as any).role === "ADMIN" || (session.user as any).role === "SUPER_ADMIN");
+    ((session.user as { role: string }).role === "ADMIN" || (session.user as { role: string }).role === "SUPER_ADMIN");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,8 +73,9 @@ export default function EmployeesPage() {
         setRole("SALES_EXECUTIVE");
         loadEmployees();
       }
-    } catch (err: any) {
-      setError(err.message || "Something went wrong.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -107,7 +108,7 @@ export default function EmployeesPage() {
           <div className="space-y-1.5">
             <h3 className="text-sm font-bold text-foreground">No employees registered yet</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              There are no employee target profiles in this tenant. Click the "Add Agent / Admin" button at the top right to register your first workspace member.
+              There are no employee target profiles in this tenant. Click the &quot;Add Agent / Admin&quot; button at the top right to register your first workspace member.
             </p>
           </div>
         </div>
@@ -121,6 +122,7 @@ export default function EmployeesPage() {
                 className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-6 hover-lift"
               >
                 <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={emp.avatarUrl}
                     alt={emp.name}

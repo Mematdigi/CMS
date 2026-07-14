@@ -15,10 +15,11 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const role = (session.user as any).role || "SALES_EXECUTIVE";
+    const user = session.user as { id?: string; role?: string };
+    const userId = user.id;
+    const role = user.role || "SALES_EXECUTIVE";
     const tasks = await TaskRepository.findMany(
-      (session.user as any).role === "SALES_EXECUTIVE" ? userId : undefined
+      user.role === "SALES_EXECUTIVE" ? userId : undefined
     );
 
     const maskedTasks = tasks.map((t) => ({
@@ -27,8 +28,9 @@ export async function GET() {
     }));
 
     return NextResponse.json({ success: true, data: maskedTasks });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const currentUserId = (session.user as any).id;
+    const currentUserId = (session.user as { id: string }).id;
     const body = await request.json();
     const { title, description, priority, dueDate, assignedToId, leadId } = body;
 
@@ -61,8 +63,9 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, data: newTask }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -90,7 +93,8 @@ export async function PATCH(request: Request) {
     });
 
     return NextResponse.json({ success: true, data: updatedTask });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

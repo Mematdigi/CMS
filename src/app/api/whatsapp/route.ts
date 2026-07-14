@@ -22,8 +22,9 @@ export async function GET(request: Request) {
 
     const messages = await WhatsappRepository.findMany(leadId);
     return NextResponse.json({ success: true, data: messages });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const currentUserId = (session.user as any).id;
+    const currentUserId = (session.user as { id: string }).id;
     const body = await request.json();
     const { leadId, messageBody, mediaUrl, templateName } = body;
 
@@ -70,7 +71,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, data: message }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

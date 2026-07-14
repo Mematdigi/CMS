@@ -100,8 +100,9 @@ export async function POST(request: Request) {
       message: `Live call initiated. Your phone is ringing first.`,
     });
 
-  } catch (error: any) {
-    console.error("[Direct Dial Call] Error:", error.message);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Direct Dial Call] Error:", message);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

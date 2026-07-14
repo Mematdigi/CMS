@@ -1,6 +1,3 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { getPrisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -47,8 +44,9 @@ export async function POST(request: Request) {
           console.log(`[TwiML Webhook] Resolved leadId ${leadId} to unmasked number: ${lead.phone}`);
           rawTo = lead.phone;
         }
-      } catch (err: any) {
-        console.error(`[TwiML Webhook] Failed to resolve leadId ${leadId}:`, err.message);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[TwiML Webhook] Failed to resolve leadId ${leadId}:`, message);
       }
     }
 
@@ -95,7 +93,7 @@ export async function POST(request: Request) {
     return new Response(twiml, {
       headers: { "Content-Type": "text/xml" },
     });
-  } catch (error: any) {
+  } catch {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response><Say>An error occurred. Please try again.</Say></Response>`;
     return new Response(twiml, { headers: { "Content-Type": "text/xml" } });

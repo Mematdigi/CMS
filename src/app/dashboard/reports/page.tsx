@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { FileText, Download, Printer, BarChart3, AlertCircle } from "lucide-react";
+import { FileText, Download, Printer } from "lucide-react";
 import { exportToCSV, exportToExcel } from "@/lib/exports";
 import { getAuditLogsAction } from "@/lib/actions/crm.actions";
 
@@ -17,7 +17,7 @@ export default function ReportsPage() {
   const handleExport = async (type: "csv" | "excel", reportId: string) => {
     setLoading(reportId);
     try {
-      let data: any[] = [];
+      let data: Record<string, unknown>[] = [];
       if (reportId === "leads") {
         const res = await fetch("/api/leads?limit=1000");
         const json = await res.json();
@@ -27,7 +27,7 @@ export default function ReportsPage() {
         const json = await res.json();
         if (json.success) data = json.data;
       } else if (reportId === "audits") {
-        data = await getAuditLogsAction();
+        data = (await getAuditLogsAction()) as unknown as Record<string, unknown>[];
       }
 
       if (type === "csv") {
@@ -35,11 +35,11 @@ export default function ReportsPage() {
       } else {
         exportToExcel(data, `${reportId}_Report`);
       }
-    } catch (err) {}
+    } catch {}
     setLoading(null);
   };
 
-  const handlePrint = (reportId: string) => {
+  const handlePrint = () => {
     window.print();
   };
 
@@ -84,7 +84,7 @@ export default function ReportsPage() {
                 <Download className="w-3.5 h-3.5" /> Excel
               </button>
               <button
-                onClick={() => handlePrint(rep.id)}
+                onClick={handlePrint}
                 className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md"
               >
                 <Printer className="w-3.5 h-3.5" /> Print PDF

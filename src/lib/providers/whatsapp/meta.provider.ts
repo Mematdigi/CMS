@@ -4,7 +4,7 @@ export interface MetaWhatsappTemplatePayload {
   to: string;
   templateName: string;
   languageCode: string;
-  components?: any[];
+  components?: Record<string, unknown>[];
 }
 
 export class MetaWhatsappClient {
@@ -61,11 +61,12 @@ export class MetaWhatsappClient {
         success: false,
         error: "Failed to dispatch WhatsApp template.",
       };
-    } catch (err: any) {
-      console.error("[Meta WhatsApp Client] Error dispatching template:", err.message);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[Meta WhatsApp Client] Error dispatching template:", errMsg);
       return {
         success: false,
-        error: err.response?.data?.error?.message || err.message,
+        error: (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message || errMsg,
       };
     }
   }
@@ -111,11 +112,12 @@ export class MetaWhatsappClient {
         success: false,
         error: "Failed to send free-text message.",
       };
-    } catch (err: any) {
-      console.error("[Meta WhatsApp Client] Error sending free-text:", err.message);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[Meta WhatsApp Client] Error sending free-text:", errMsg);
       return {
         success: false,
-        error: err.response?.data?.error?.message || err.message,
+        error: (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message || errMsg,
       };
     }
   }
