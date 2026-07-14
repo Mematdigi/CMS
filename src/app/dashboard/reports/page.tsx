@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { FileText, Download, Printer } from "lucide-react";
+import { FileText, Download, Printer, BarChart3, AlertCircle } from "lucide-react";
 import { exportToCSV, exportToExcel } from "@/lib/exports";
 import { getAuditLogsAction } from "@/lib/actions/crm.actions";
 
@@ -17,7 +17,7 @@ export default function ReportsPage() {
   const handleExport = async (type: "csv" | "excel", reportId: string) => {
     setLoading(reportId);
     try {
-      let data: Record<string, unknown>[] = [];
+      let data: any[] = [];
       if (reportId === "leads") {
         const res = await fetch("/api/leads?limit=1000");
         const json = await res.json();
@@ -35,11 +35,11 @@ export default function ReportsPage() {
       } else {
         exportToExcel(data, `${reportId}_Report`);
       }
-    } catch {}
+    } catch (err) {}
     setLoading(null);
   };
 
-  const handlePrint = (_reportId: string) => {
+  const handlePrint = (reportId: string) => {
     window.print();
   };
 

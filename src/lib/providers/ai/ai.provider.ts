@@ -56,9 +56,8 @@ export class AIProviderService {
         );
         return response.data?.choices?.[0]?.message?.content || "Failed to parse OpenAI summary.";
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error("[AI Provider Service] Error generating lead summary:", errorMessage);
+    } catch (err: any) {
+      console.error("[AI Provider Service] Error generating lead summary:", err.message);
       return "Unable to compile AI summaries at this moment.";
     }
   }
@@ -98,7 +97,7 @@ export class AIProviderService {
         const score = parseInt(text.trim(), 10);
         return isNaN(score) ? 65 : score;
       }
-    } catch {
+    } catch (err) {
       return 60; // Safe default
     }
   }

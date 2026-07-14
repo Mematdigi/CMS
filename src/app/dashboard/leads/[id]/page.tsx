@@ -15,38 +15,15 @@ import {
   Calendar,
   User,
   Plus,
+  Trash2,
+  Paperclip,
   Activity,
   FileText,
   PhoneCall,
   Save,
   PenSquare,
 } from "lucide-react";
-import { LeadActivity } from "@prisma/client";
-
-export interface FormattedEmployee {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  role: string;
-  department: string;
-  targetMonthly: number;
-  currentSalesMonthly: number;
-  conversionRate: number;
-  attendanceCount: number;
-  leaveBalance: number;
-  avatarUrl: string;
-}
-
-export interface ClientCallLog {
-  id: string;
-  leadId: string;
-  userId: string;
-  callType: string;
-  durationSec: number;
-  notes?: string | null;
-  createdAt: string | Date;
-}
+import { LeadActivity, CallLog } from "@prisma/client";
 
 export interface Lead {
   id: string;
@@ -115,10 +92,10 @@ export default function LeadDetailPage({ params }: PageProps) {
   const [editCompany, setEditCompany] = useState("");
   const [editBudget, setEditBudget] = useState(0);
   const [editStatus, setEditStatus] = useState<Lead["status"]>("NEW");
-  const [employees, setEmployees] = useState<FormattedEmployee[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [editAssignedToId, setEditAssignedToId] = useState("");
 
-  const loadData = useCallback(async () => {
+  const loadData = async () => {
     try {
       const res = await fetch(`/api/leads/${id}`);
       const json = await res.json();
@@ -144,7 +121,7 @@ export default function LeadDetailPage({ params }: PageProps) {
       ];
 
       if (callJson.success) {
-        (callJson.data as ClientCallLog[]).filter((c) => c.leadId === id).forEach((call) => {
+        callJson.data.filter((c: any) => c.leadId === id).forEach((call: any) => {
           logs.push({
             id: call.id,
             leadId: id,
@@ -169,13 +146,13 @@ export default function LeadDetailPage({ params }: PageProps) {
 
       logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setActivities(logs);
-    } catch {}
-  }, [id, router]);
+    } catch (err) {}
+  };
 
   useEffect(() => {
     loadData();
     getEmployeesAction().then(setEmployees).catch(() => {});
-  }, [id, loadData]);
+  }, [id]);
 
   const handleUpdateStatus = async (newStage: Lead["status"]) => {
     if (!lead) return;
@@ -186,7 +163,7 @@ export default function LeadDetailPage({ params }: PageProps) {
         body: JSON.stringify({ status: newStage }),
       });
       loadData();
-    } catch {}
+    } catch (err) {}
   };
 
   const handleSaveDetails = async () => {
@@ -207,7 +184,7 @@ export default function LeadDetailPage({ params }: PageProps) {
       });
       setIsEditing(false);
       loadData();
-    } catch {}
+    } catch (err) {}
   };
 
   const handleAddNote = async () => {
@@ -221,7 +198,7 @@ export default function LeadDetailPage({ params }: PageProps) {
       });
       setNewNote("");
       loadData();
-    } catch {}
+    } catch (err) {}
   };
 
   if (!lead) return null;

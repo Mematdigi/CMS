@@ -1,5 +1,5 @@
 import { getPrisma } from "@/lib/prisma";
-import { LeadStatus, Priority, Prisma } from "@prisma/client";
+import { UserRole, LeadStatus, Priority } from "@prisma/client";
 
 // LEADS REPOS
 export class LeadRepository {
@@ -27,7 +27,7 @@ export class LeadRepository {
     const skip = (page - 1) * limit;
 
     // Build Prisma query filters
-    const whereClause: Prisma.LeadWhereInput = {
+    const whereClause: any = {
       tenantId,
       isDeleted: false,
     };
@@ -117,7 +117,7 @@ export class LeadRepository {
     });
   }
 
-  static async update(id: string, data: Prisma.LeadUncheckedUpdateInput) {
+  static async update(id: string, data: any) {
     return getPrisma().lead.update({
       where: { id },
       data: {
@@ -172,7 +172,7 @@ export class TaskRepository {
     });
   }
 
-  static async update(id: string, data: Prisma.TaskUncheckedUpdateInput) {
+  static async update(id: string, data: any) {
     return getPrisma().task.update({
       where: { id },
       data,
@@ -206,7 +206,7 @@ export class FollowupRepository {
     });
   }
 
-  static async update(id: string, data: Prisma.FollowupUncheckedUpdateInput) {
+  static async update(id: string, data: any) {
     return getPrisma().followup.update({
       where: { id },
       data,
@@ -291,7 +291,7 @@ export class EmployeeRepository {
     });
   }
 
-  static async update(id: string, data: Prisma.EmployeeUncheckedUpdateInput) {
+  static async update(id: string, data: any) {
     return getPrisma().employee.update({
       where: { id },
       data,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions, AuthUser } from "@/lib/auth";
+import { authOptions } from "@/lib/auth";
 import { LeadRepository } from "@/lib/repositories/crm.repository";
 import { maskLead } from "@/lib/utils/masking";
 
@@ -13,9 +13,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const user = session.user as AuthUser;
-    const role = user.role || "SALES_EXECUTIVE";
-    const currentUserId = user.id;
+    const role = (session.user as any).role || "SALES_EXECUTIVE";
+    const currentUserId = (session.user as any).id;
     const { id } = await params;
     const lead = await LeadRepository.findById(id);
 
@@ -29,12 +28,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const maskedLead = {
       ...maskLead(lead, role),
-      assignedToName: lead.assignedTo?.name || "Unassigned",
+      assignedToName: (lead as any).assignedTo?.name || "Unassigned",
     };
     return NextResponse.json({ success: true, data: maskedLead });
-  } catch (error) {
-    const err = error as Error;
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
@@ -45,9 +43,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const user = session.user as AuthUser;
-    const role = user.role || "SALES_EXECUTIVE";
-    const currentUserId = user.id;
+    const role = (session.user as any).role || "SALES_EXECUTIVE";
+    const currentUserId = (session.user as any).id;
     const { id } = await params;
     const body = await request.json();
 
@@ -60,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 403 });
     }
 
-    const updateData = { ...body };
+    let updateData = { ...body };
     // Sales Executive or Viewer should not modify contact details
     if (role === "SALES_EXECUTIVE" || role === "VIEWER") {
       delete updateData.phone;
@@ -75,12 +72,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const updatedLead = await LeadRepository.update(id, updateData);
     const maskedUpdatedLead = {
       ...maskLead(updatedLead, role),
-      assignedToName: updatedLead.assignedTo?.name || "Unassigned",
+      assignedToName: (updatedLead as any).assignedTo?.name || "Unassigned",
     };
     return NextResponse.json({ success: true, data: maskedUpdatedLead });
-  } catch (error) {
-    const err = error as Error;
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
@@ -91,8 +87,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const user = session.user as AuthUser;
-    const role = user.role || "SALES_EXECUTIVE";
+    const role = (session.user as any).role || "SALES_EXECUTIVE";
     if (role === "SALES_EXECUTIVE" || role === "VIEWER") {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 403 });
     }
@@ -105,8 +100,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     await LeadRepository.delete(id);
     return NextResponse.json({ success: true, data: { id } });
-  } catch (error) {
-    const err = error as Error;
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

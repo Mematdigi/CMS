@@ -55,10 +55,9 @@ export class TwilioWhatsappClient {
         success: false,
         error: response.data?.message || "Failed to dispatch WhatsApp message.",
       };
-    } catch (err) {
-      const error = err as { message: string; response?: { data?: { message?: string } } };
-      const errMsg = error.response?.data?.message || error.message;
-      console.error("[Twilio WhatsApp Client] Error dispatching message:", error.response?.data || error.message);
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || err.message;
+      console.error("[Twilio WhatsApp Client] Error dispatching message:", err.response?.data || err.message);
       return {
         success: false,
         error: errMsg,

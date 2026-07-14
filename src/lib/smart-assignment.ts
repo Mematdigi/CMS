@@ -6,30 +6,7 @@ export interface AssignmentRule {
   assignToUserId: string;
 }
 
-export interface SmartAssignmentLead {
-  name?: string | null;
-  phone?: string | null;
-  email?: string | null;
-  company?: string | null;
-  industry?: string | null;
-  productId?: string | null;
-  productName?: string | null;
-  budget?: number | null;
-  leadSource?: string | null;
-  campaign?: string | null;
-  status?: string | null;
-  priority?: string | null;
-  assignedToId?: string | null;
-  assignedToName?: string | null;
-  state?: string | null;
-  city?: string | null;
-  country?: string | null;
-  language?: string | null;
-  notes?: string | null;
-  attachments?: unknown;
-}
-
-export async function evaluateSmartAssignment(lead: SmartAssignmentLead): Promise<{ userId: string; userName: string }> {
+export async function evaluateSmartAssignment(lead: any): Promise<{ userId: string; userName: string }> {
   // 1. Get settings rules
   const rules: AssignmentRule[] = [
     { field: "language", value: "Spanish", assignToUserId: "user-exec2" },

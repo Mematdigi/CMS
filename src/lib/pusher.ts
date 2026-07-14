@@ -23,15 +23,14 @@ if (process.env.NODE_ENV !== "production") {
   globalThis.pusherInstance = pusherServer;
 }
 
-export async function triggerRealtimeNotification(userId: string, eventName: string, data: unknown) {
+export async function triggerRealtimeNotification(userId: string, eventName: string, data: any) {
   try {
     if (!appId || !key || !secret) {
       console.warn(`[Pusher WebSocket Server] Missing credentials. Simulating event ${eventName}...`);
       return;
     }
     await pusherServer.trigger(`private-user-${userId}`, eventName, data);
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error("[Pusher WebSocket Server] Error triggering event:", errorMessage);
+  } catch (err: any) {
+    console.error("[Pusher WebSocket Server] Error triggering event:", err.message);
   }
 }
