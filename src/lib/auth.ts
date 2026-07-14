@@ -2,6 +2,14 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { getPrisma } from "@/lib/prisma";
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  tenantId: string;
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -49,17 +57,19 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
-        token.tenantId = (user as any).tenantId;
+        const authUser = user as unknown as AuthUser;
+        token.id = authUser.id;
+        token.role = authUser.role;
+        token.tenantId = authUser.tenantId;
       }
       return token;
     },
     async session({ session, token }) {
       if (token && session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-        (session.user as any).tenantId = token.tenantId;
+        const sessionUser = session.user as unknown as AuthUser;
+        sessionUser.id = token.id as string;
+        sessionUser.role = token.role as string;
+        sessionUser.tenantId = token.tenantId as string;
       }
       return session;
     },

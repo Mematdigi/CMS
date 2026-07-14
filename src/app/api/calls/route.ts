@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { CallRepository } from "@/lib/repositories/crm.repository";
+import { AuthUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -12,12 +13,12 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as AuthUser).id;
     const calls = await CallRepository.findMany(
-      (session.user as any).role === "SALES_EXECUTIVE" ? userId : undefined
+      (session.user as AuthUser).role === "SALES_EXECUTIVE" ? userId : undefined
     );
 
-    const mappedCalls = calls.map((call: any) => ({
+    const mappedCalls = calls.map((call) => ({
       id: call.id,
       leadId: call.leadId,
       leadName: call.lead?.name || "Unknown Lead",
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const currentUserId = (session.user as any).id;
+    const currentUserId = (session.user as AuthUser).id;
     const body = await request.json();
     const { leadId, durationSec, notes, callType, recordingUrl } = body;
 
@@ -53,14 +54,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const newCall = (await CallRepository.create({
+    const newCall = await CallRepository.create({
       leadId,
       userId: currentUserId,
       durationSec: parseInt(durationSec, 10),
       callType,
       recordingUrl: recordingUrl || undefined,
       notes: notes || "",
-    })) as any;
+    });
 
     const mappedNewCall = {
       id: newCall.id,

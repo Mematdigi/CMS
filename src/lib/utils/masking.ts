@@ -1,4 +1,13 @@
-export function maskLead(lead: any, role: string) {
+export interface MaskableLead {
+  phone?: string | null;
+  altPhone?: string | null;
+  email?: string | null;
+  state?: string | null;
+  city?: string | null;
+  country?: string | null;
+}
+
+export function maskLead<T extends MaskableLead>(lead: T, role: string): T {
   if (!lead) return lead;
   
   // Apply masking for SALES_EXECUTIVE and VIEWER roles
@@ -41,7 +50,7 @@ export function maskLead(lead: any, role: string) {
   return lead;
 }
 
-export function maskLeadsArray(leads: any[], role: string) {
+export function maskLeadsArray<T extends MaskableLead>(leads: T[], role: string): T[] {
   if (!leads) return [];
   return leads.map((lead) => maskLead(lead, role));
 }

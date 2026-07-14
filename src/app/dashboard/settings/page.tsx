@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Settings as SettingsIcon, ShieldCheck, Mail, MessageSquare, Key, LayoutGrid, CheckCircle } from "lucide-react";
+import { Settings as SettingsIcon, Mail, MessageSquare, Key, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { saveTenantSettingsAction } from "@/lib/actions/crm.actions";
 
@@ -40,7 +40,7 @@ export default function SettingsPage() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {}
+    } catch {}
   };
 
   return (
@@ -65,7 +65,7 @@ export default function SettingsPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as "company" | "permissions" | "templates")}
               className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all outline-none ${
                 isActive
                   ? "border-indigo-500 text-indigo-500"

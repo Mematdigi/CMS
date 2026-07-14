@@ -1,4 +1,4 @@
-export function exportToCSV(data: any[], filename: string) {
+export function exportToCSV(data: Record<string, unknown>[], filename: string) {
   if (data.length === 0) return;
   const headers = Object.keys(data[0]).join(",");
   const rows = data.map((row) =>
@@ -20,9 +20,9 @@ export function exportToCSV(data: any[], filename: string) {
   document.body.removeChild(link);
 }
 
-export function exportToExcel(data: any[], filename: string) {
+export function exportToExcel(data: Record<string, unknown>[], filename: string) {
   // Simple XML format Excel export that MS Excel can read natively
-  let excelTemplate = `
+  const excelTemplate = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
       <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Sheet1</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->

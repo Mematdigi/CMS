@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, AuthUser } from "@/lib/auth";
 import { getPrisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Unauthorized access" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as AuthUser).id;
     if (!userId) {
       return NextResponse.json({ success: false, error: "User ID not found in session." }, { status: 400 });
     }
@@ -32,8 +32,9 @@ export async function GET() {
     }));
 
     return NextResponse.json({ success: true, data: mappedNotifications });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const err = error as Error;
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
@@ -67,7 +68,8 @@ export async function PATCH(request: Request) {
         createdAt: updatedNotification.createdAt.toISOString(),
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    const err = error as Error;
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

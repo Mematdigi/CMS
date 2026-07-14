@@ -15,7 +15,7 @@ export interface CallLog {
 }
 
 import { motion } from "framer-motion";
-import { Phone, PhoneCall, Volume2, Play, Pause, Trash2, ArrowUpRight, ArrowDownLeft, PhoneMissed, Search, MessageSquare } from "lucide-react";
+import { Phone, PhoneCall, Volume2, Play, Pause, ArrowUpRight, ArrowDownLeft, PhoneMissed, Search, MessageSquare } from "lucide-react";
 
 export default function CallingPage() {
   const { startCall } = useCRMStore();

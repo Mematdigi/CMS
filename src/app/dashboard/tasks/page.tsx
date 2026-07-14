@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, CheckSquare, Clock, AlertCircle, MessageSquare, Paperclip, CheckCircle, User } from "lucide-react";
+import { Plus, CheckSquare, Clock, CheckCircle, User } from "lucide-react";
 // Define client interfaces matching the database models
 export interface Task {
   id: string;
@@ -27,12 +27,27 @@ export interface Lead {
   company?: string | null;
 }
 
+export interface FormattedEmployee {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  targetMonthly: number;
+  currentSalesMonthly: number;
+  conversionRate: number;
+  attendanceCount: number;
+  leaveBalance: number;
+  avatarUrl: string;
+}
+
 import { getEmployeesAction } from "@/lib/actions/crm.actions";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<FormattedEmployee[]>([]);
   
   // New task form states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -53,7 +68,7 @@ export default function TasksPage() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success) {
-          const mapped = json.data.map((t: any) => ({
+          const mapped = (json.data as Task[]).map((t) => ({
             ...t,
             leadName: t.lead?.name || undefined,
           }));
@@ -104,7 +119,7 @@ export default function TasksPage() {
         setAssignedToId("");
         loadData();
       }
-    } catch (err) {}
+    } catch {}
   };
 
   const handleUpdateStatus = async (taskId: string, newStatus: Task["status"]) => {
@@ -121,7 +136,7 @@ export default function TasksPage() {
           setActiveTask((prev) => (prev ? { ...prev, status: newStatus } : null));
         }
       }
-    } catch (err) {}
+    } catch {}
   };
 
   const handleAddComment = () => {
@@ -370,7 +385,7 @@ export default function TasksPage() {
                   <label className="block font-bold text-slate-400 uppercase mb-1.5">Priority Classification</label>
                   <select
                     value={priority}
-                    onChange={(e) => setPriority(e.target.value as any)}
+                    onChange={(e) => setPriority(e.target.value as Task["priority"])}
                     className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none font-semibold text-indigo-500 text-xs"
                   >
                     <option value="LOW">LOW</option>
