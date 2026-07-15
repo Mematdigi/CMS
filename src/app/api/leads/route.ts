@@ -63,6 +63,16 @@ export async function GET(request: Request) {
   }
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -76,7 +86,7 @@ export async function POST(request: Request) {
     if (!name || !phone || !email) {
       return NextResponse.json(
         { success: false, error: "Name, phone, and email are required fields." },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -123,12 +133,12 @@ export async function POST(request: Request) {
       notes: notes || "",
     });
 
-    return NextResponse.json({ success: true, data: newLead }, { status: 201 });
+    return NextResponse.json({ success: true, data: newLead }, { status: 201, headers: corsHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       { success: false, error: message || "Internal Server Error" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
