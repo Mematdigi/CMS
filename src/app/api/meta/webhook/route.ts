@@ -5,8 +5,19 @@ import { evaluateSmartAssignment } from "@/lib/smart-assignment";
 
 export const runtime = "nodejs";
 
+interface MetaFieldData {
+  name?: string;
+  values?: string[];
+}
+
+interface MetaLeadData {
+  id: string;
+  created_time?: string;
+  field_data?: MetaFieldData[];
+}
+
 // Helper for conditional debug logging
-function logDebug(message: string, data?: any) {
+function logDebug(message: string, data?: unknown) {
   if (process.env.META_DEBUG === "true" || process.env.NODE_ENV === "development") {
     console.log(
       `[META_WEBHOOK_DEBUG] ${message}`,
@@ -131,7 +142,7 @@ export async function POST(request: Request) {
           continue;
         }
 
-        let leadData: any;
+        let leadData: MetaLeadData;
 
         // 3. Fetch lead details from the Meta Graph API (or use Mock if configured)
         if (pageAccessToken === "mock_page_access_token_xyz") {
@@ -161,7 +172,7 @@ export async function POST(request: Request) {
             continue; // Move to next leadgen change event
           }
 
-          leadData = await graphResponse.json();
+          leadData = (await graphResponse.json()) as MetaLeadData;
           logDebug("Graph API response received", leadData);
         }
 
