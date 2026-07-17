@@ -88,11 +88,21 @@ export default function LeadsPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   
   // Filter / Search states
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Debounce search input to avoid hitting database on every keystroke
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1); // Reset page to 1 when search changes
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
 
   // Bulk Actions
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
@@ -348,8 +358,8 @@ export default function LeadsPage() {
             <input
               type="text"
               placeholder="Search by name, email, company, or phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-secondary border border-border focus:border-indigo-500 rounded-xl text-xs outline-none transition-all"
             />
           </div>
@@ -462,7 +472,6 @@ export default function LeadsPage() {
                   <th className="p-4">Contact Detail</th>
                   <th className="p-4">Corporate Info</th>
                   <th className="p-4">Stage Status</th>
-                  <th className="p-4">Lead Score</th>
                   <th className="p-4">Representative</th>
                   <th className="p-4 text-center">Actions</th>
                 </tr>
@@ -470,7 +479,7 @@ export default function LeadsPage() {
               <tbody>
                 {leads.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
                       <div className="flex flex-col items-center gap-3">
                         <FolderOpen className="w-12 h-12 text-slate-400" />
                         <span>No pipeline leads found matching filter rules.</span>
@@ -521,14 +530,6 @@ export default function LeadsPage() {
                         >
                           {lead.status}
                         </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold text-xs border border-indigo-500/20">
-                            {lead.score}
-                          </div>
-                          <span className="text-2xs text-muted-foreground font-medium">AI Match</span>
-                        </div>
                       </td>
                       <td className="p-4 font-medium text-slate-700 dark:text-slate-300">{lead.assignedToName}</td>
                       <td className="p-4 text-center">
@@ -614,9 +615,6 @@ export default function LeadsPage() {
                         }`}>
                           {lead.priority}
                         </span>
-                        <div className="w-6 h-6 rounded bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold text-[10px]">
-                          {lead.score}
-                        </div>
                       </div>
                       <div>
                         <div className="font-bold text-xs text-foreground truncate">{lead.name}</div>

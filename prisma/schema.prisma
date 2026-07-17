@@ -178,6 +178,7 @@ model Lead {
   notes        String?
   attachments  String[]
   score        Int        @default(50) // AI Lead Score (1-100)
+  metaLeadId   String?
   createdAt    DateTime?  @default(now())
   updatedAt    DateTime?  @updatedAt
   isDeleted    Boolean    @default(false)
@@ -203,6 +204,11 @@ model Lead {
   @@index([assignedToId])
   @@index([phone])
   @@index([email])
+  @@index([tenantId, isDeleted])
+  @@index([assignedToId, isDeleted])
+  @@index([tenantId, status, isDeleted])
+  @@index([tenantId, leadSource, isDeleted])
+  @@index([metaLeadId])
 }
 
 // 7. Lead Custom Fields System (Allows Ad-hoc Custom Fields dynamically)
@@ -301,6 +307,7 @@ model CallLog {
 
   @@index([leadId])
   @@index([userId])
+  @@index([userId, createdAt])
 }
 
 // 12. WhatsApp Business Messaging Logs
@@ -319,6 +326,7 @@ model WhatsappMessage {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
+  @@index([leadId, createdAt])
 }
 
 // 13. Notifications Center
@@ -334,6 +342,7 @@ model Notification {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 // 14. Campaigns (Marketing channels)

@@ -21,8 +21,29 @@ async function verifySession() {
 export async function getEmployeesAction() {
   const session = await verifySession();
   const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
-  const employees = await EmployeeRepository.findMany(tenantId);
   
+  const [employees, wonLeads] = await Promise.all([
+    EmployeeRepository.findMany(tenantId),
+    getPrisma().lead.findMany({
+      where: {
+        tenantId,
+        status: "WON",
+        isDeleted: false,
+      },
+      select: {
+        assignedToId: true,
+        budget: true,
+      },
+    }),
+  ]);
+
+  const salesMap = new Map<string, number>();
+  for (const lead of wonLeads) {
+    if (lead.assignedToId) {
+      salesMap.set(lead.assignedToId, (salesMap.get(lead.assignedToId) || 0) + (lead.budget ? Number(lead.budget) : 0));
+    }
+  }
+
   // Format Decimal values to numbers for serialization
   return employees.map((emp) => ({
     id: emp.id,
@@ -32,7 +53,7 @@ export async function getEmployeesAction() {
     role: emp.user.role,
     department: emp.department?.name || "General",
     targetMonthly: Number(emp.targetMonthly),
-    currentSalesMonthly: 0, // Calculated dynamically in analytics
+    currentSalesMonthly: salesMap.get(emp.userId) || 0,
     conversionRate: Number(emp.conversionRate),
     attendanceCount: emp.attendanceCount,
     leaveBalance: emp.leaveBalance,
@@ -137,38 +158,59 @@ export async function getDashboardAnalyticsAction() {
   const session = await verifySession();
   const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
 
-  // 1. Total counts
-  const totalLeads = await getPrisma().lead.count({
-    where: { tenantId, isDeleted: false },
-  });
+  // Fetch all core datasets in parallel
+  const [allLeads, dbEmployees, dbCampaigns] = await Promise.all([
+    getPrisma().lead.findMany({
+      where: { tenantId, isDeleted: false },
+      select: {
+        id: true,
+        status: true,
+        leadSource: true,
+        budget: true,
+        assignedToId: true,
+      },
+    }),
+    getPrisma().employee.findMany({
+      where: { user: { tenantId } },
+      include: { user: true },
+    }),
+    getPrisma().campaign.findMany({
+      where: { tenantId },
+      include: {
+        leads: {
+          where: { isDeleted: false },
+          select: { id: true },
+        },
+      },
+    }),
+  ]);
+
+  // 1. Total leads count
+  const totalLeads = allLeads.length;
 
   // 2. Won leads value (revenue)
-  const wonLeads = await getPrisma().lead.findMany({
-    where: { tenantId, status: "WON", isDeleted: false },
-    select: { budget: true },
-  });
+  const wonLeads = allLeads.filter((l) => l.status === "WON");
   const totalRevenue = wonLeads.reduce((acc, lead) => acc + (lead.budget ? Number(lead.budget) : 0), 0);
 
-  // 3. Lead status counts (Funnel)
-  const statusGroups = await getPrisma().lead.groupBy({
-    by: ["status"],
-    where: { tenantId, isDeleted: false },
-    _count: { id: true },
-  });
-  const conversionFunnel = statusGroups.map((g) => ({
-    stage: g.status,
-    value: g._count.id,
+  // 3. Lead status counts (Funnel) aggregated in-memory
+  const statusMap = new Map<string, number>();
+  for (const lead of allLeads) {
+    statusMap.set(lead.status, (statusMap.get(lead.status) || 0) + 1);
+  }
+  const conversionFunnel = Array.from(statusMap.entries()).map(([stage, value]) => ({
+    stage,
+    value,
   }));
 
-  // 4. Lead Source counts
-  const sourceGroups = await getPrisma().lead.groupBy({
-    by: ["leadSource"],
-    where: { tenantId, isDeleted: false },
-    _count: { id: true },
-  });
-  const leadSourceData = sourceGroups.map((g) => ({
-    name: g.leadSource || "Unknown",
-    value: g._count.id,
+  // 4. Lead Source counts aggregated in-memory
+  const sourceMap = new Map<string, number>();
+  for (const lead of allLeads) {
+    const src = lead.leadSource || "Unknown";
+    sourceMap.set(src, (sourceMap.get(src) || 0) + 1);
+  }
+  const leadSourceData = Array.from(sourceMap.entries()).map(([name, value]) => ({
+    name,
+    value,
   }));
 
   // 5. Hardcoded trend base filled with db parameters
@@ -181,45 +223,33 @@ export async function getDashboardAnalyticsAction() {
     { name: "Jun", revenue: totalRevenue || 45000 },
   ];
 
-  // 6. Fetch actual employees performance
-  const dbEmployees = await getPrisma().employee.findMany({
-    where: { user: { tenantId } },
-    include: { user: true },
+  // 6. Fetch actual employees performance aggregated in-memory
+  const employeeLeadsMap = new Map<string, typeof allLeads>();
+  for (const lead of allLeads) {
+    if (lead.assignedToId) {
+      if (!employeeLeadsMap.has(lead.assignedToId)) {
+        employeeLeadsMap.set(lead.assignedToId, []);
+      }
+      employeeLeadsMap.get(lead.assignedToId)!.push(lead);
+    }
+  }
+
+  const employeePerformance = dbEmployees.map((emp) => {
+    const empLeads = employeeLeadsMap.get(emp.userId) || [];
+    const totalLeadsCount = empLeads.length;
+    const wonLeads = empLeads.filter((l) => l.status === "WON");
+    const wonLeadsCount = wonLeads.length;
+    const revenue = wonLeads.reduce((sum, l) => sum + (l.budget ? Number(l.budget) : 0), 0);
+
+    return {
+      name: emp.user.name,
+      leads: totalLeadsCount,
+      won: wonLeadsCount,
+      rev: revenue,
+    };
   });
 
-  const employeePerformance = await Promise.all(
-    dbEmployees.map(async (emp) => {
-      const wonLeadsCount = await getPrisma().lead.count({
-        where: { assignedToId: emp.userId, status: "WON", isDeleted: false },
-      });
-      const totalLeadsCount = await getPrisma().lead.count({
-        where: { assignedToId: emp.userId, isDeleted: false },
-      });
-      const wonLeads = await getPrisma().lead.findMany({
-        where: { assignedToId: emp.userId, status: "WON", isDeleted: false },
-        select: { budget: true },
-      });
-      const revenue = wonLeads.reduce((sum, l) => sum + (l.budget ? Number(l.budget) : 0), 0);
-
-      return {
-        name: emp.user.name,
-        leads: totalLeadsCount,
-        won: wonLeadsCount,
-        rev: revenue,
-      };
-    })
-  );
-
-  // 7. Fetch actual campaigns
-  const dbCampaigns = await getPrisma().campaign.findMany({
-    where: { tenantId },
-    include: {
-      leads: {
-        where: { isDeleted: false },
-      },
-    },
-  });
-
+  // 7. Fetch actual campaigns aggregated in-memory
   const campaignPerformance = dbCampaigns.map((camp) => {
     return {
       name: camp.name,
