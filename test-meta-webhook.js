@@ -1,8 +1,32 @@
 const crypto = require("crypto");
 
-const CRM_URL = "http://localhost:3000/api/meta/webhook";
-const VERIFY_TOKEN = "my_secure_verify_token_123";
-const APP_SECRET = "my_fb_app_secret_abc";
+const fs = require("fs");
+const path = require("path");
+
+// Load .env file manually
+const envPath = path.join(__dirname, ".env");
+const envConfig = {};
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, "utf-8");
+  envContent.split(/\r?\n/).forEach((line) => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      let key = match[1];
+      let value = match[2] || "";
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.substring(1, value.length - 1);
+      } else if (value.startsWith("'") && value.endsWith("'")) {
+        value = value.substring(1, value.length - 1);
+      }
+      envConfig[key] = value;
+    }
+  });
+}
+
+const BASE_URL = envConfig.NEXTAUTH_URL || "http://localhost:3000";
+const CRM_URL = `${BASE_URL.replace(/\/$/, "")}/api/meta/webhook`;
+const VERIFY_TOKEN = envConfig.META_VERIFY_TOKEN || "memat_leads_2026_secure";
+const APP_SECRET = envConfig.META_APP_SECRET || "1b0e4e34acb8850c23afc0e9d6666c7c";
 
 // Helper to make requests in Node
 async function makeRequest(url, method, headers, body) {
