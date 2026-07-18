@@ -1,3 +1,4 @@
+import "./env-clean";
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { getPrisma } from "@/lib/prisma";

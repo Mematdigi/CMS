@@ -1,5 +1,15 @@
 import { PrismaClient, UserRole } from "@prisma/client";
 
+if (process.env.DATABASE_URL) {
+  const trimmed = process.env.DATABASE_URL.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    process.env.DATABASE_URL = trimmed.slice(1, -1);
+  }
+}
+
 const prisma = new PrismaClient();
 
 async function main() {

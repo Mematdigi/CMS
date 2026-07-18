@@ -1,3 +1,4 @@
+import "./env-clean";
 import { PrismaClient } from "@prisma/client";
 
 declare global {
