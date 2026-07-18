@@ -14,6 +14,7 @@ interface MetaLeadData {
   id: string;
   created_time?: string;
   field_data?: MetaFieldData[];
+  platform?: string;
 }
 
 // Helper for conditional debug logging
@@ -36,6 +37,15 @@ export async function GET(request: Request) {
     const mode = searchParams.get("hub.mode");
     const token = searchParams.get("hub.verify_token");
     const challenge = searchParams.get("hub.challenge");
+
+    // Handle health checks / browser access without query parameters
+    if (!mode && !token && !challenge) {
+      logDebug("GET Webhook status check (Health check)");
+      return new Response("Meta Lead Ads Webhook endpoint is active.", {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
 
     logDebug("GET Webhook verification requested", { mode, token, challenge });
 
@@ -100,7 +110,13 @@ export async function POST(request: Request) {
       .update(rawBody)
       .digest("hex");
 
-    if (signature !== expectedSignature) {
+    const signatureBuffer = Buffer.from(signature, "hex");
+    const expectedSignatureBuffer = Buffer.from(expectedSignature, "hex");
+
+    if (
+      signatureBuffer.length !== expectedSignatureBuffer.length ||
+      !crypto.timingSafeEqual(signatureBuffer, expectedSignatureBuffer)
+    ) {
       console.warn("[META_WEBHOOK] Signature verification failed.");
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -144,12 +160,13 @@ export async function POST(request: Request) {
 
         let leadData: MetaLeadData;
 
-        // 3. Fetch lead details from the Meta Graph API (or use Mock if configured)
-        if (pageAccessToken === "mock_page_access_token_xyz") {
+        // 3. Fetch lead details from the Meta Graph API (or use Mock if configured or test lead ID)
+        if (pageAccessToken === "mock_page_access_token_xyz" || leadgen_id.startsWith("lead_test_")) {
           logDebug("Graph API request sent (MOCKED offline mode) for leadgen_id: " + leadgen_id);
           leadData = {
             id: leadgen_id,
             created_time: new Date().toISOString(),
+            platform: leadgen_id.includes("instagram") ? "ig" : "fb",
             field_data: [
               { name: "email", values: ["test-lead@example.com"] },
               { name: "full_name", values: ["Test Meta Lead"] },
@@ -161,7 +178,7 @@ export async function POST(request: Request) {
           logDebug("Graph API response received (MOCKED offline mode)", leadData);
         } else {
           logDebug(`Graph API request sent for leadgen_id: ${leadgen_id}`);
-          const graphUrl = `https://graph.facebook.com/v20.0/${leadgen_id}?access_token=${encodeURIComponent(
+          const graphUrl = `https://graph.facebook.com/v20.0/${leadgen_id}?fields=id,created_time,field_data,platform&access_token=${encodeURIComponent(
             pageAccessToken
           )}`;
 
@@ -223,6 +240,19 @@ export async function POST(request: Request) {
           logDebug("Lead appears in the CRM dashboard.");
         } else {
           logDebug("New lead detected. Running smart assignment...");
+
+          // Normalize lead source dynamically based on the platform from Meta
+          let leadSource = "Facebook Ads"; // Default fallback
+          if (leadData.platform === "ig") {
+            leadSource = "Instagram Ads";
+          } else if (leadData.platform === "messenger") {
+            leadSource = "Messenger Ads";
+          } else if (leadData.platform === "wa") {
+            leadSource = "WhatsApp Ads";
+          } else if (leadData.platform === "fb") {
+            leadSource = "Facebook Ads";
+          }
+
           // Evaluate smart assignment for new lead
           const assignedUser = await evaluateSmartAssignment({
             name,
@@ -232,7 +262,7 @@ export async function POST(request: Request) {
             city,
             state,
             country,
-            leadSource: "Facebook Ads",
+            leadSource,
           });
 
           logDebug(`Smart assignment determined recipient: ${assignedUser.userName} (ID: ${assignedUser.userId})`);
@@ -249,20 +279,20 @@ export async function POST(request: Request) {
               city,
               state,
               country,
-              leadSource: "Facebook Ads",
+              leadSource,
               metaLeadId: leadgen_id,
               status: "NEW",
               priority: "MEDIUM",
               createdById: "user-admin", // Created by system admin profile
               assignedToId: assignedUser.userId,
-              notes: `Facebook Lead captured automatically.\nLeadgen ID: ${leadgen_id}\nForm ID: ${form_id}\nPage ID: ${page_id}\nForm Fields: ${JSON.stringify(
+              notes: `${leadSource.replace(" Ads", "")} Lead captured automatically.\nLeadgen ID: ${leadgen_id}\nForm ID: ${form_id}\nPage ID: ${page_id}\nForm Fields: ${JSON.stringify(
                 fields
               )}`,
             },
           });
 
           logDebug("Lead saved in MongoDB (CREATED).", newLead);
-          logDebug("Lead appears in the CRM dashboard under Facebook Ads source.");
+          logDebug(`Lead appears in the CRM dashboard under ${leadSource} source.`);
         }
       }
     }

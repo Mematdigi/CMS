@@ -67,6 +67,19 @@ async function runTests() {
   console.log(`META_DEBUG="true"\n`);
 
   // ==========================================
+  // TEST 0: GET Webhook Health Check (No parameters)
+  // ==========================================
+  console.log("--- TEST 0: Webhook GET Health Check (No parameters) ---");
+  const getHealthResult = await makeRequest(CRM_URL, "GET");
+  console.log(`Status: ${getHealthResult.status}`);
+  console.log(`Response body: "${getHealthResult.body}"`);
+  if (getHealthResult.status === 200 && getHealthResult.body.includes("active")) {
+    console.log("✅ TEST 0 PASSED: Health check returned 200 OK!\n");
+  } else {
+    console.log("❌ TEST 0 FAILED: Health check failed.\n");
+  }
+
+  // ==========================================
   // TEST 1: GET Webhook Verification (Success)
   // ==========================================
   console.log("--- TEST 1: Webhook GET Verification (Correct Token) ---");
@@ -152,6 +165,48 @@ async function runTests() {
   const postSuccessResult = await makeRequest(CRM_URL, "POST", goodHeaders, rawBodyString);
   console.log(`Status: ${postSuccessResult.status}`);
   console.log(`Response body: ${postSuccessResult.body}`);
+
+  // ==========================================
+  // TEST 5: POST Webhook Instagram Lead Ingestion (Valid Signature)
+  // ==========================================
+  console.log("\n--- TEST 5: Webhook POST Instagram (Valid Signature) ---");
+  const postInstagramBody = {
+    object: "page",
+    entry: [
+      {
+        id: "page_123",
+        time: Math.floor(Date.now() / 1000),
+        changes: [
+          {
+            field: "leadgen",
+            value: {
+              ad_id: "ad_444",
+              form_id: "form_555",
+              leadgen_id: "lead_test_instagram_111",
+              created_time: Math.floor(Date.now() / 1000),
+              page_id: "page_123",
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const instagramRawBodyString = JSON.stringify(postInstagramBody);
+  const expectedInstagramSignature = crypto
+    .createHmac("sha256", APP_SECRET)
+    .update(instagramRawBodyString)
+    .digest("hex");
+
+  const instagramHeaders = {
+    "Content-Type": "application/json",
+    "x-hub-signature-256": `sha256=${expectedInstagramSignature}`,
+  };
+
+  console.log("Sending Instagram POST payload with valid signature...");
+  const postInstagramResult = await makeRequest(CRM_URL, "POST", instagramHeaders, instagramRawBodyString);
+  console.log(`Status: ${postInstagramResult.status}`);
+  console.log(`Response body: ${postInstagramResult.body}`);
 
   console.log("\nNote on Lead Ingestion:");
   console.log("- If META_PAGE_ACCESS_TOKEN is not configured or is mock, the Graph API call will fail, which is expected during offline testing. You will see a Graph API error log in your Next.js console.");
