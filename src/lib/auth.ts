@@ -12,34 +12,49 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password", placeholder: "••••••••" },
       },
       async authorize(credentials) {
+        console.log("[NextAuth] Login attempt for email:", credentials?.email);
         if (!credentials?.email || !credentials?.password) {
+          console.log("[NextAuth] Failure: Missing email or password");
           return null;
         }
 
         const email = credentials.email.toLowerCase();
         const password = credentials.password;
 
-        // Query credentials directly from PostgreSQL
-        const user = await getPrisma().user.findFirst({
-          where: { email, isDeleted: false },
-        });
+        try {
+          // Query credentials directly from database
+          const user = await getPrisma().user.findFirst({
+            where: { email, isDeleted: false },
+          });
 
-        if (!user) {
+          console.log("[NextAuth] User search result:", user ? { id: user.id, email: user.email, role: user.role } : "Not Found");
+
+          if (!user) {
+            console.log("[NextAuth] Failure: User not found or isDeleted is true");
+            return null;
+          }
+
+          // Match password (supports seeded plain-text check or hashing check)
+          const isMatch = password === "admin123" || user.passwordHash === password;
+          console.log("[NextAuth] Password match status:", isMatch);
+
+          if (!isMatch) {
+            console.log("[NextAuth] Failure: Password mismatch");
+            return null;
+          }
+
+          console.log("[NextAuth] Success: Authorized user", user.id);
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            tenantId: user.tenantId,
+          };
+        } catch (dbError) {
+          console.error("[NextAuth] Database query error:", dbError);
           return null;
         }
-
-        // Match password (supports seeded plain-text check or hashing check)
-        if (password !== "admin123" && user.passwordHash !== password) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          tenantId: user.tenantId,
-        };
       },
     }),
   ],
