@@ -1,11 +1,12 @@
 import NextAuth from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
 const handler = NextAuth(authOptions);
 
-async function authHandler(req: Request, ctx: any) {
+async function authHandler(req: NextRequest, ctx: { params: Promise<{ nextauth: string[] }> }) {
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto") || "https";
   
