@@ -114,7 +114,7 @@ export default function LeadDetailPage({ params }: PageProps) {
   const [waTemplate, setWaTemplate] = useState("");
   const [isSendingWa, setIsSendingWa] = useState(false);
   const [waSendError, setWaSendError] = useState("");
-  const [whatsappHistory, setWhatsappHistory] = useState<(WhatsappMessage & { user?: { name: string } })[]>([]);
+  const [whatsappHistory, setWhatsappHistory] = useState<(WhatsappMessage & { user?: { name: string }; error?: string | null })[]>([]);
 
   // Form states
   const [editName, setEditName] = useState("");
