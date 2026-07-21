@@ -1,63 +1,70 @@
-import axios from "axios";
+import twilio from "twilio";
 
 export class TwilioWhatsappClient {
   private accountSid: string;
   private authToken: string;
   private fromNumber: string;
+  private statusCallbackUrl: string;
 
   constructor() {
     this.accountSid = process.env.TWILIO_ACCOUNT_SID || "";
     this.authToken = process.env.TWILIO_AUTH_TOKEN || "";
     this.fromNumber = process.env.TWILIO_WA_FROM || "whatsapp:+14155238886";
+    this.statusCallbackUrl = process.env.TWILIO_WA_STATUS_CALLBACK_URL || "";
   }
 
   async sendWhatsapp(to: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (!this.accountSid || !this.authToken) {
-      console.warn("[Twilio WhatsApp Client] Missing credentials. Simulating dispatch...");
+      console.warn("[Twilio WhatsApp Client] Missing credentials.");
       return {
-        success: true,
-        messageId: `tw-wa-mock-${Date.now()}`,
+        success: false,
+        error: "Twilio credentials (account SID or auth token) are not configured.",
       };
     }
 
     try {
-      const authHeader = Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64");
-      
+      // Clean whitespace and special characters
       const cleanPhone = to.replace(/\s+/g, "").replace(/[\(\)\-]/g, "");
+      
+      // Basic check for E.164-like numeric content
+      const numericPart = cleanPhone.replace(/^\+/, "");
+      if (!/^\d+$/.test(numericPart) || numericPart.length < 7 || numericPart.length > 15) {
+        return {
+          success: false,
+          error: `Invalid phone number format: "${to}". Number must be numeric and between 7 to 15 digits.`,
+        };
+      }
+      
       const recipientNumber = cleanPhone.startsWith("+") ? cleanPhone : `+91${cleanPhone}`; // Fallback to Indian country code
 
-      const params = new URLSearchParams();
-      params.append("To", `whatsapp:${recipientNumber}`);
-      params.append("From", this.fromNumber);
-      params.append("Body", message);
+      // Initialize Twilio client using official Node SDK
+      const client = twilio(this.accountSid, this.authToken);
 
-      console.log(`[Twilio WhatsApp Client] Dispatching message to ${recipientNumber}...`);
-      const response = await axios.post(
-        `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Messages.json`,
-        params,
-        {
-          headers: {
-            Authorization: `Basic ${authHeader}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-        }
-      );
+      const params = {
+        from: this.fromNumber,
+        to: `whatsapp:${recipientNumber}`,
+        body: message,
+        statusCallback: this.statusCallbackUrl || undefined,
+      };
 
-      if (response.status === 201 && response.data?.sid) {
-        console.log(`[Twilio WhatsApp Client] WhatsApp message sent successfully. SID: ${response.data.sid}`);
+      console.log(`[Twilio WhatsApp Client] Dispatching message to ${recipientNumber} via Twilio SDK...`);
+      const response = await client.messages.create(params);
+
+      if (response && response.sid) {
+        console.log(`[Twilio WhatsApp Client] WhatsApp message sent successfully. SID: ${response.sid}`);
         return {
           success: true,
-          messageId: response.data.sid,
+          messageId: response.sid,
         };
       }
 
       return {
         success: false,
-        error: response.data?.message || "Failed to dispatch WhatsApp message.",
+        error: "Failed to dispatch WhatsApp message. No Message SID returned from Twilio.",
       };
     } catch (err) {
-      const errMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || (err instanceof Error ? err.message : String(err));
-      console.error("[Twilio WhatsApp Client] Error dispatching message:", (err as { response?: { data?: unknown } })?.response?.data || (err instanceof Error ? err.message : String(err)));
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[Twilio WhatsApp Client] Error dispatching message:", err);
       return {
         success: false,
         error: errMsg,

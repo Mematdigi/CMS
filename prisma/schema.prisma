@@ -320,13 +320,20 @@ model WhatsappMessage {
   direction     String   // "INBOUND", "OUTBOUND"
   status        String   // "SENT", "DELIVERED", "READ", "FAILED"
   templateName  String?
+  phone         String?
+  from          String?
+  to            String?
+  twilioSid     String?
+  error         String?
   createdAt     DateTime @default(now())
+  updatedAt     DateTime? @updatedAt
 
   lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([leadId, createdAt])
+  @@index([twilioSid])
 }
 
 // 13. Notifications Center

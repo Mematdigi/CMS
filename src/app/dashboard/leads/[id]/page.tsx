@@ -18,8 +18,10 @@ import {
   PhoneCall,
   Save,
   PenSquare,
+  MessageSquare,
+  X,
 } from "lucide-react";
-import { LeadActivity } from "@prisma/client";
+import { LeadActivity, WhatsappMessage } from "@prisma/client";
 
 interface Employee {
   id: string;
@@ -88,6 +90,14 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+const WHATSAPP_TEMPLATES = [
+  { id: "welcome", name: "Welcome Opportunity", body: "Hello {{name}}, welcome to our CRM service! We are excited to help you grow your business." },
+  { id: "follow_up", name: "Follow-up", body: "Hi {{name}}, just following up on our previous conversation. Let me know if you have any questions!" },
+  { id: "pricing", name: "Pricing Inquiry", body: "Hello {{name}}, here is the pricing proposal we discussed. Please let us know if this aligns with your budget." },
+  { id: "appointment", name: "Appointment Reminder", body: "Hi {{name}}, this is a friendly reminder for our upcoming meeting scheduled for tomorrow. Looking forward to speaking with you!" },
+  { id: "missed_call", name: "Missed Call Back", body: "Hi {{name}}, we just tried calling you but missed you. Please let us know when is a good time to connect." }
+];
+
 export default function LeadDetailPage({ params }: PageProps) {
   const router = useRouter();
   const { startCall, user } = useCRMStore();
@@ -97,6 +107,14 @@ export default function LeadDetailPage({ params }: PageProps) {
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [newNote, setNewNote] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+
+  // WhatsApp modal states
+  const [isWaModalOpen, setIsWaModalOpen] = useState(false);
+  const [waMessage, setWaMessage] = useState("");
+  const [waTemplate, setWaTemplate] = useState("");
+  const [isSendingWa, setIsSendingWa] = useState(false);
+  const [waSendError, setWaSendError] = useState("");
+  const [whatsappHistory, setWhatsappHistory] = useState<(WhatsappMessage & { user?: { name: string } })[]>([]);
 
   // Form states
   const [editName, setEditName] = useState("");
@@ -159,6 +177,13 @@ export default function LeadDetailPage({ params }: PageProps) {
 
       logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setActivities(logs);
+
+      // Fetch WhatsApp history
+      const waRes = await fetch(`/api/whatsapp?leadId=${id}`);
+      const waJson = await waRes.json();
+      if (waJson.success) {
+        setWhatsappHistory(waJson.data);
+      }
     } catch {}
   }, [id, router]);
 
@@ -232,6 +257,17 @@ export default function LeadDetailPage({ params }: PageProps) {
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md"
           >
             <PhoneCall className="w-4 h-4" /> Start Call
+          </button>
+          <button
+            onClick={() => {
+              setWaMessage("");
+              setWaTemplate("");
+              setWaSendError("");
+              setIsWaModalOpen(true);
+            }}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md"
+          >
+            <MessageSquare className="w-4 h-4" /> Send WhatsApp
           </button>
           <button
             onClick={() => setIsEditing(!isEditing)}
@@ -464,6 +500,63 @@ export default function LeadDetailPage({ params }: PageProps) {
               ))}
             </div>
           </div>
+
+          {/* WhatsApp Messaging History */}
+          <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <MessageSquare className="w-4.5 h-4.5 text-indigo-500" /> WhatsApp Communication Logs
+              </h3>
+              <span className="text-2xs text-muted-foreground font-semibold px-2 py-0.5 bg-secondary rounded-full">
+                {whatsappHistory.length} messages
+              </span>
+            </div>
+
+            {whatsappHistory.length === 0 ? (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No WhatsApp messages logged for this contact.
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                {whatsappHistory.map((msg) => {
+                  let badgeColor = "bg-slate-500/10 text-slate-500 border border-slate-500/20";
+                  if (msg.status === "QUEUED") {
+                    badgeColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+                  } else if (msg.status === "SENT") {
+                    badgeColor = "bg-blue-500/10 text-blue-500 border border-blue-500/20";
+                  } else if (msg.status === "DELIVERED") {
+                    badgeColor = "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+                  } else if (msg.status === "READ") {
+                    badgeColor = "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20";
+                  } else if (msg.status === "FAILED") {
+                    badgeColor = "bg-rose-500/10 text-rose-500 border border-rose-500/20";
+                  }
+
+                  return (
+                    <div key={msg.id} className="p-3 bg-secondary/20 border border-border/60 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground font-bold">
+                            {new Date(msg.createdAt).toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">• Sent by {msg.user?.name || "System"}</span>
+                        </div>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${badgeColor}`}>
+                          {msg.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{msg.messageBody}</p>
+                      {msg.error && (
+                        <div className="text-[10px] text-rose-500 bg-rose-500/5 px-2.5 py-1 rounded-lg border border-rose-500/10">
+                          <strong>Error Details:</strong> {msg.error}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Sidebar notes & operations info */}
@@ -498,6 +591,115 @@ export default function LeadDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
+
+      {/* WhatsApp Modal Dialog overlay */}
+      {isWaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-foreground">Send WhatsApp Message</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Recipient: {lead.name} ({lead.phone})</p>
+              </div>
+              <button 
+                onClick={() => setIsWaModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 flex-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Select Message Template</label>
+                <select
+                  value={waTemplate}
+                  onChange={(e) => {
+                    const tplId = e.target.value;
+                    setWaTemplate(tplId);
+                    const selected = WHATSAPP_TEMPLATES.find(t => t.id === tplId);
+                    if (selected) {
+                      setWaMessage(selected.body.replace("{{name}}", lead.name));
+                    } else {
+                      setWaMessage("");
+                    }
+                  }}
+                  className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none text-xs text-indigo-500 font-semibold"
+                >
+                  <option value="">-- Free Text Message --</option>
+                  {WHATSAPP_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5 flex justify-between">
+                  <span>Message Body</span>
+                  <span className={`${waMessage.length > 1600 ? "text-rose-500" : "text-slate-400"}`}>
+                    {waMessage.length} characters
+                  </span>
+                </label>
+                <textarea
+                  value={waMessage}
+                  onChange={(e) => setWaMessage(e.target.value)}
+                  placeholder="Type your WhatsApp message..."
+                  className="w-full p-3 bg-secondary border border-border rounded-xl text-xs outline-none focus:border-indigo-500 min-h-36 resize-none"
+                />
+              </div>
+
+              {waSendError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl">
+                  {waSendError}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 bg-secondary/30 border-t border-border flex justify-end gap-2">
+              <button
+                onClick={() => setIsWaModalOpen(false)}
+                disabled={isSendingWa}
+                className="px-4 py-2 text-xs font-semibold hover:bg-secondary rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!waMessage.trim()) return;
+                  setIsSendingWa(true);
+                  setWaSendError("");
+                  try {
+                    const res = await fetch("/api/whatsapp/send", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        leadId: lead.id,
+                        messageBody: waMessage,
+                        templateName: waTemplate || undefined,
+                      })
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                      setIsWaModalOpen(false);
+                      loadData();
+                    } else {
+                      setWaSendError(json.error || "Failed to send message.");
+                    }
+                  } catch {
+                    setWaSendError("Network error sending message.");
+                  } finally {
+                    setIsSendingWa(false);
+                  }
+                }}
+                disabled={isSendingWa || !waMessage.trim()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md disabled:opacity-50"
+              >
+                {isSendingWa ? "Sending..." : "Send Message"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

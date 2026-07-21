@@ -249,6 +249,13 @@ export class WhatsappRepository {
     return getPrisma().whatsappMessage.findMany({
       where: { leadId },
       orderBy: { createdAt: "asc" },
+      include: {
+        user: {
+          select: {
+            name: true,
+          },
+        },
+      },
     });
   }
 
@@ -260,11 +267,26 @@ export class WhatsappRepository {
     direction: "INBOUND" | "OUTBOUND";
     status?: string;
     templateName?: string;
+    phone?: string;
+    from?: string;
+    to?: string;
+    twilioSid?: string;
+    error?: string;
   }) {
     return getPrisma().whatsappMessage.create({
       data: {
         ...data,
         status: data.status || "SENT",
+      },
+    });
+  }
+
+  static async updateStatusBySid(twilioSid: string, status: string, error?: string) {
+    return getPrisma().whatsappMessage.updateMany({
+      where: { twilioSid },
+      data: {
+        status,
+        error: error || undefined,
       },
     });
   }

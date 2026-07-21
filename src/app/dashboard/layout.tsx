@@ -340,7 +340,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className={`min-h-screen flex text-foreground bg-background ${theme === "dark" ? "dark" : ""}`}>
+    <div className={`h-screen overflow-hidden flex text-foreground bg-background ${theme === "dark" ? "dark" : ""}`}>
       {/* Sidebar Navigation */}
       <aside
         className={`${sidebarOpen ? "w-64" : "w-20"
