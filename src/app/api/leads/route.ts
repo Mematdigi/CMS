@@ -4,6 +4,12 @@ import { authOptions } from "@/lib/auth";
 import { LeadRepository } from "@/lib/repositories/crm.repository";
 import { evaluateSmartAssignment } from "@/lib/smart-assignment";
 import { maskLeadsArray } from "@/lib/utils/masking";
+import { getPrisma } from "@/lib/prisma";
+
+// Recent-duplicate guard: a matching phone+email pair within this window is
+// treated as a repeat click (e.g. the Shopify storefront script firing twice
+// on a double-click) rather than a genuinely new lead.
+const DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
 
 export const runtime = "nodejs";
 
@@ -66,7 +72,7 @@ export async function GET(request: Request) {
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-CRM-Source-Key",
 };
 
 export async function OPTIONS() {
@@ -80,6 +86,22 @@ export async function POST(request: Request) {
     const tenantId = user ? (user.tenantId || "tenant-1") : "tenant-1";
     const userId = user ? (user.id || "user-current") : "user-admin";
 
+    // Unauthenticated (browser/storefront) callers must present the shared
+    // source key once it's configured. Session-authenticated dashboard
+    // requests are already trusted and skip this check. If LEADS_SOURCE_KEY
+    // isn't set in the environment yet, the check is skipped entirely so
+    // existing integrations don't break until it's rolled out.
+    const sourceKey = process.env.LEADS_SOURCE_KEY;
+    if (!user && sourceKey) {
+      const providedKey = request.headers.get("x-crm-source-key");
+      if (providedKey !== sourceKey) {
+        return NextResponse.json(
+          { success: false, error: "Unauthorized" },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+    }
+
     const body = await request.json();
     const { name, phone, email, company, industry, productId, productName, budget, leadSource, campaign, state, city, country, language, notes } = body;
 
@@ -87,6 +109,35 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "Name, phone, and email are required fields." },
         { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Duplicate guard: the same phone+email submitted again inside the
+    // window (e.g. a double-click on Add to Cart) updates the existing
+    // lead's notes instead of creating a new duplicate record.
+    const windowStart = new Date(Date.now() - DUPLICATE_WINDOW_MS);
+    const recentDuplicate = await getPrisma().lead.findFirst({
+      where: {
+        tenantId,
+        isDeleted: false,
+        phone,
+        email,
+        createdAt: { gte: windowStart },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (recentDuplicate) {
+      const mergedNotes = notes
+        ? `${recentDuplicate.notes ? recentDuplicate.notes + "\n\n" : ""}${notes}`
+        : recentDuplicate.notes;
+      const updatedLead = await getPrisma().lead.update({
+        where: { id: recentDuplicate.id },
+        data: { notes: mergedNotes, updatedAt: new Date() },
+      });
+      return NextResponse.json(
+        { success: true, data: updatedLead, deduped: true },
+        { status: 200, headers: corsHeaders }
       );
     }
 

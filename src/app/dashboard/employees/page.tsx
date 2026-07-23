@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 export interface Employee {
   id: string;
   userId: string;
@@ -16,10 +16,16 @@ export interface Employee {
   avatarUrl: string;
 }
 import { getEmployeesAction, createEmployeeAction } from "@/lib/actions/crm.actions";
-import { UserCheck, Plus } from "lucide-react";
+import { UserCheck, Plus, Search, Trophy, Medal, Award, Users, TrendingUp, DollarSign } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Button, Card, Input, Select, Modal, PageHeader, EmptyState } from "@/components/ui";
+import { Button, Card, Input, Select, Modal, PageHeader, EmptyState, StatCard } from "@/components/ui";
+
+const RANK_STYLES = [
+  { icon: Trophy, ring: "ring-amber-400/60", badge: "from-amber-400 to-amber-600", glow: "shadow-amber-500/30" },
+  { icon: Medal, ring: "ring-slate-300/60", badge: "from-slate-300 to-slate-400", glow: "shadow-slate-400/20" },
+  { icon: Award, ring: "ring-orange-400/60", badge: "from-orange-400 to-orange-600", glow: "shadow-orange-500/20" },
+];
 
 export default function EmployeesPage() {
   const { data: session } = useSession();
@@ -27,6 +33,10 @@ export default function EmployeesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter / sort
+  const [departmentFilter, setDepartmentFilter] = useState("ALL");
+  const [sortBy, setSortBy] = useState<"performance" | "revenue" | "conversion" | "name">("performance");
 
   // Form states
   const [name, setName] = useState("");
@@ -47,6 +57,52 @@ export default function EmployeesPage() {
   const isAdmin =
     session?.user &&
     ((session.user as { role: string }).role === "ADMIN" || (session.user as { role: string }).role === "SUPER_ADMIN");
+
+  const withProgress = useMemo(
+    () =>
+      employees.map((emp) => ({
+        ...emp,
+        progress: emp.targetMonthly > 0 ? Math.min((emp.currentSalesMonthly / emp.targetMonthly) * 100, 100) : 0,
+      })),
+    [employees]
+  );
+
+  const departments = useMemo(
+    () => Array.from(new Set(employees.map((e) => e.department))).sort(),
+    [employees]
+  );
+
+  const stats = useMemo(() => {
+    const total = employees.length;
+    const avgConversion = total ? employees.reduce((s, e) => s + e.conversionRate, 0) / total : 0;
+    const totalRevenue = employees.reduce((s, e) => s + e.currentSalesMonthly, 0);
+    const topPerformer = [...withProgress].sort((a, b) => b.progress - a.progress)[0];
+    return { total, avgConversion, totalRevenue, topPerformer };
+  }, [employees, withProgress]);
+
+  const visibleEmployees = useMemo(() => {
+    let list = withProgress;
+
+    if (departmentFilter !== "ALL") {
+      list = list.filter((e) => e.department === departmentFilter);
+    }
+
+    const sorted = [...list];
+    switch (sortBy) {
+      case "revenue":
+        sorted.sort((a, b) => b.currentSalesMonthly - a.currentSalesMonthly);
+        break;
+      case "conversion":
+        sorted.sort((a, b) => b.conversionRate - a.conversionRate);
+        break;
+      case "name":
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      default:
+        sorted.sort((a, b) => b.progress - a.progress);
+    }
+    return sorted;
+  }, [withProgress, departmentFilter, sortBy]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +154,65 @@ export default function EmployeesPage() {
         }
       />
 
+      {employees.length > 0 && (
+        <>
+          {/* Stat summary row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard title="Total Team Members" value={stats.total} desc="Active workspace agents" icon={Users} tone="indigo" delay={0} />
+            <StatCard
+              title="Avg. Conversion Rate"
+              value={`${stats.avgConversion.toFixed(1)}%`}
+              desc="Across all agents this month"
+              icon={TrendingUp}
+              tone="emerald"
+              delay={0.05}
+            />
+            <StatCard
+              title="Total Monthly Sales"
+              value={`$${stats.totalRevenue.toLocaleString()}`}
+              desc="Combined current sales"
+              icon={DollarSign}
+              tone="violet"
+              delay={0.1}
+            />
+            <StatCard
+              title="Top Performer"
+              value={stats.topPerformer?.name ?? "—"}
+              desc={stats.topPerformer ? `${stats.topPerformer.progress.toFixed(0)}% of target reached` : "No data yet"}
+              icon={Trophy}
+              tone="amber"
+              delay={0.15}
+            />
+          </div>
+
+          {/* Filter toolbar */}
+          <Card className="flex flex-col sm:flex-row justify-end items-center gap-3 p-4">
+            <Select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="w-full sm:w-44"
+            >
+              <option value="ALL">All Departments</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="w-full sm:w-48"
+            >
+              <option value="performance">Sort: Target Progress</option>
+              <option value="revenue">Sort: Highest Sales</option>
+              <option value="conversion">Sort: Conversion Rate</option>
+              <option value="name">Sort: Name (A-Z)</option>
+            </Select>
+          </Card>
+        </>
+      )}
+
       {/* Grid listing */}
       {employees.length === 0 ? (
         <Card className="p-12 max-w-lg mx-auto">
@@ -107,18 +222,43 @@ export default function EmployeesPage() {
             description={'There are no employee target profiles in this tenant. Click the "Add Agent / Admin" button at the top right to register your first workspace member.'}
           />
         </Card>
+      ) : visibleEmployees.length === 0 ? (
+        <Card className="p-12 max-w-lg mx-auto">
+          <EmptyState
+            icon={Search}
+            title="No matching employees"
+            description="Try selecting a different department filter to find the agent you're looking for."
+          />
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {employees.map((emp, i) => {
-            const targetProgress = Math.min((emp.currentSalesMonthly / emp.targetMonthly) * 100, 100);
+          {visibleEmployees.map((emp, i) => {
+            const rankStyle = sortBy === "performance" && i < 3 ? RANK_STYLES[i] : null;
+            const RankIcon = rankStyle?.icon;
             return (
-              <Card key={emp.id} delay={i * 0.06} hoverLift glow className="p-6 space-y-6">
+              <Card
+                key={emp.id}
+                delay={i * 0.06}
+                hoverLift
+                glow
+                className={`relative p-6 space-y-6 ${rankStyle ? `shadow-lg ${rankStyle.glow}` : ""}`}
+              >
+                {rankStyle && RankIcon && (
+                  <div
+                    className={`absolute -top-3 -left-3 w-9 h-9 rounded-full bg-gradient-to-br ${rankStyle.badge} flex items-center justify-center shadow-md ring-4 ring-background`}
+                  >
+                    <RankIcon className="w-4 h-4 text-white" strokeWidth={2.5} />
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={emp.avatarUrl}
                     alt={emp.name}
-                    className="w-12 h-12 rounded-full border border-border object-cover"
+                    className={`w-12 h-12 rounded-full border border-border object-cover ${
+                      rankStyle ? `ring-2 ${rankStyle.ring} ring-offset-2 ring-offset-card` : ""
+                    }`}
                   />
                   <div className="min-w-0">
                     <h3 className="font-bold text-sm text-foreground truncate">{emp.name}</h3>
@@ -140,9 +280,15 @@ export default function EmployeesPage() {
                     <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${targetProgress}%` }}
+                        animate={{ width: `${emp.progress}%` }}
                         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
-                        className="bg-indigo-600 h-full rounded-full"
+                        className={`h-full rounded-full ${
+                          emp.progress >= 100
+                            ? "bg-emerald-500"
+                            : emp.progress >= 60
+                            ? "bg-indigo-600"
+                            : "bg-amber-500"
+                        }`}
                       />
                     </div>
                   </div>

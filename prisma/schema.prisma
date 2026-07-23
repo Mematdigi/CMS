@@ -179,6 +179,7 @@ model Lead {
   attachments  String[]
   score        Int        @default(50) // AI Lead Score (1-100)
   metaLeadId   String?
+  shopifyOrderId String?
   createdAt    DateTime?  @default(now())
   updatedAt    DateTime?  @updatedAt
   isDeleted    Boolean    @default(false)
@@ -209,6 +210,7 @@ model Lead {
   @@index([tenantId, status, isDeleted])
   @@index([tenantId, leadSource, isDeleted])
   @@index([metaLeadId])
+  @@index([shopifyOrderId])
 }
 
 // 7. Lead Custom Fields System (Allows Ad-hoc Custom Fields dynamically)
