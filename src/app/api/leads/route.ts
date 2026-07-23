@@ -5,11 +5,41 @@ import { LeadRepository } from "@/lib/repositories/crm.repository";
 import { evaluateSmartAssignment } from "@/lib/smart-assignment";
 import { maskLeadsArray } from "@/lib/utils/masking";
 import { getPrisma } from "@/lib/prisma";
+import { LeadStatus } from "@prisma/client";
 
-// Recent-duplicate guard: a matching phone+email pair within this window is
-// treated as a repeat click (e.g. the Shopify storefront script firing twice
-// on a double-click) rather than a genuinely new lead.
-const DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
+// Orders/leads the webhook couldn't attach a real email to fall back to this
+// value — never use it to match/merge, or every anonymous order would merge
+// into one lead.
+const PLACEHOLDER_EMAIL = "no-email@shopify-order.com";
+
+// A lead already won, lost, or closed is a finished deal — a new storefront
+// touch from the same contact starts a fresh lead instead of reopening it.
+const TERMINAL_STATUSES: LeadStatus[] = ["WON", "LOST", "CLOSED"];
+
+// Shopify may send phone as "07007316576" or "+917007316576" etc. Stripping
+// down to the last 10 digits keeps matching/storage consistent regardless of
+// leading zero or country code.
+function normalizePhone(raw: string): string {
+  const digits = (raw || "").replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+// Storefront events describe themselves in the first line of `notes` (e.g.
+// "Action: Add to Cart"). Use that to advance the pipeline stage so a WON
+// lead really does mean an order came through, not just a cart click.
+function deriveStage(currentStatus: LeadStatus, notes: string | undefined): LeadStatus {
+  const actionLine = (notes || "").split("\n")[0]?.toLowerCase() || "";
+  if (actionLine.includes("order placed") || actionLine.includes("order paid") || actionLine.includes("payment")) {
+    return "WON";
+  }
+  if (actionLine.includes("buy now")) {
+    return "NEGOTIATION";
+  }
+  if (actionLine.includes("add to cart")) {
+    return "INTERESTED";
+  }
+  return currentStatus;
+}
 
 export const runtime = "nodejs";
 
@@ -112,31 +142,57 @@ export async function POST(request: Request) {
       );
     }
 
-    // Duplicate guard: the same phone+email submitted again inside the
-    // window (e.g. a double-click on Add to Cart) updates the existing
-    // lead's notes instead of creating a new duplicate record.
-    const windowStart = new Date(Date.now() - DUPLICATE_WINDOW_MS);
-    const recentDuplicate = await getPrisma().lead.findFirst({
-      where: {
-        tenantId,
-        isDeleted: false,
-        phone,
-        email,
-        createdAt: { gte: windowStart },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const normalizedPhone = normalizePhone(phone);
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const isPlaceholderEmail = normalizedEmail === PLACEHOLDER_EMAIL;
 
-    if (recentDuplicate) {
+    // Storefront upsert: unauthenticated (Shopify) submissions merge into an
+    // active lead already tied to this phone/email instead of creating a
+    // duplicate row, so add-to-cart -> buy-now -> order shows up as one
+    // lead's timeline. Session-authenticated (dashboard) requests always
+    // insert a fresh lead — manual CRM workflows stay unaffected.
+    const existingLead = !user
+      ? await getPrisma().lead.findFirst({
+          where: {
+            tenantId,
+            isDeleted: false,
+            status: { notIn: TERMINAL_STATUSES },
+            OR: [
+              { phone: normalizedPhone },
+              ...(isPlaceholderEmail ? [] : [{ email: normalizedEmail }]),
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+
+    if (existingLead) {
       const mergedNotes = notes
-        ? `${recentDuplicate.notes ? recentDuplicate.notes + "\n\n" : ""}${notes}`
-        : recentDuplicate.notes;
+        ? `${existingLead.notes ? existingLead.notes + "\n\n" : ""}${notes}`
+        : existingLead.notes;
+      const nextStatus = deriveStage(existingLead.status, notes);
+      const parsedBudget = budget ? parseFloat(budget) : 0;
+
       const updatedLead = await getPrisma().lead.update({
-        where: { id: recentDuplicate.id },
-        data: { notes: mergedNotes, updatedAt: new Date() },
+        where: { id: existingLead.id },
+        data: {
+          name: !existingLead.name || existingLead.name === "Store Customer" ? name || existingLead.name : existingLead.name,
+          phone: normalizedPhone,
+          email: isPlaceholderEmail ? existingLead.email : normalizedEmail,
+          company: existingLead.company || company || existingLead.company,
+          industry: existingLead.industry || industry || existingLead.industry,
+          state: existingLead.state || state || existingLead.state,
+          city: existingLead.city || city || existingLead.city,
+          country: existingLead.country || country || existingLead.country,
+          language: existingLead.language || language || existingLead.language,
+          budget: parsedBudget > 0 ? parsedBudget : existingLead.budget,
+          notes: mergedNotes,
+          status: nextStatus,
+          updatedAt: new Date(),
+        },
       });
       return NextResponse.json(
-        { success: true, data: updatedLead, deduped: true },
+        { success: true, data: updatedLead, merged: true },
         { status: 200, headers: corsHeaders }
       );
     }
@@ -164,16 +220,16 @@ export async function POST(request: Request) {
       tenantId,
       workspaceId: "workspace-1", // scoped default
       name,
-      phone,
+      phone: normalizedPhone,
       altPhone: body.altPhone || "",
-      email,
+      email: isPlaceholderEmail ? email : normalizedEmail,
       company: company || "",
       industry: industry || "",
       productId: productId || undefined,
       budget: budget ? parseFloat(budget) : 0,
       leadSource: leadSource || "Google Search",
       campaignId: body.campaignId || undefined,
-      status: "NEW",
+      status: deriveStage("NEW" as LeadStatus, notes),
       priority: body.priority || "MEDIUM",
       createdById: userId,
       assignedToId: body.assignedToId || assignedUser.userId,
