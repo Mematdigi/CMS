@@ -186,13 +186,15 @@ export default function RegisterPage() {
             New organization registration is currently closed in this demo sandbox environment. Please use the pre-configured role-testing credentials on the login screen.
           </p>
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => router.push("/login")}
-            className="w-full py-2.5 bg-slate-900 hover:bg-slate-950 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            className="w-full py-2.5 bg-slate-900 hover:bg-slate-950 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Log In
-          </button>
+          </motion.button>
         </motion.div>
       </div>
     </div>

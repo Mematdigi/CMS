@@ -15,6 +15,8 @@ export interface CallLog {
 }
 
 import { PhoneCall, Volume2, Play, Pause, ArrowUpRight, ArrowDownLeft, PhoneMissed, Search } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button, Card, Input, PageHeader, EmptyState } from "@/components/ui";
 
 export default function CallingPage() {
   const { startCall } = useCRMStore();
@@ -77,84 +79,87 @@ export default function CallingPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-6">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">VoIP Calling Center</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Fortius Infocom cloud telephony routing integrations, recording backups, and softphone dialpad.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="VoIP Calling Center"
+        description="Fortius Infocom cloud telephony routing integrations, recording backups, and softphone dialpad."
+        border
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Softphone Dialer Keypad */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm flex flex-col items-center justify-between min-h-[420px]">
+        <Card className="p-6 flex flex-col items-center justify-between min-h-[420px]">
           <div className="w-full text-center space-y-2">
             <span className="text-2xs font-bold text-slate-400 uppercase tracking-wider block">Manual Keypad dialer</span>
-            <input
+            <Input
               type="text"
               value={typedNumber}
               onChange={(e) => setTypedNumber(e.target.value)}
               placeholder="Enter phone number..."
-              className="w-full text-center text-xl font-bold bg-transparent outline-none py-2 text-indigo-500 placeholder-slate-600"
+              className="text-center text-xl font-bold bg-transparent border-none py-2 text-indigo-500 placeholder-slate-600 focus:ring-0"
             />
           </div>
 
           {/* Numbers Grid */}
           <div className="grid grid-cols-3 gap-3 w-full max-w-[240px] my-6">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((btn) => (
-              <button
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((btn, idx) => (
+              <motion.button
                 key={btn}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: idx * 0.02 }}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
                 onClick={() => handleKeyPress(btn)}
-                className="w-14 h-14 bg-secondary hover:bg-indigo-600/10 border border-border hover:border-indigo-500/30 text-foreground font-bold text-lg rounded-full flex items-center justify-center transition-all"
+                className="w-14 h-14 bg-secondary hover:bg-indigo-600/10 border border-border hover:border-indigo-500/30 text-foreground font-bold text-lg rounded-full flex items-center justify-center transition-colors"
               >
                 {btn}
-              </button>
+              </motion.button>
             ))}
           </div>
 
           <div className="flex gap-3 w-full max-w-[240px]">
-            <button
-              onClick={handleBackspace}
-              className="flex-1 py-3.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-xl border border-border transition-all"
-            >
+            <Button variant="secondary" onClick={handleBackspace} className="flex-1">
               Clear
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleManualDial}
-              className="flex-1 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-750 text-white text-xs font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-600/20"
             >
               <PhoneCall className="w-4 h-4" /> Dial
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
 
         {/* Call Logs list */}
-        <div className="xl:col-span-2 bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4 flex flex-col">
+        <Card delay={0.1} className="xl:col-span-2 p-6 space-y-4 flex flex-col">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <Volume2 className="w-4.5 h-4.5 text-indigo-500" /> SIP Call Logs History
             </h2>
             <div className="relative w-full sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
+              <Input
                 type="text"
                 placeholder="Search logs..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-1.5 bg-secondary border border-border focus:border-indigo-500 rounded-xl text-xs outline-none transition-all"
+                className="pl-10 py-1.5"
               />
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 max-h-[400px]">
             {filteredLogs.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-8">No call history logs found.</p>
+              <EmptyState icon={PhoneCall} title="No call history" description="No call history logs found." />
             ) : (
-              filteredLogs.map((log) => (
-                <div
+              <AnimatePresence>
+              {filteredLogs.map((log, idx) => (
+                <motion.div
                   key={log.id}
-                  className="p-4 bg-secondary/30 border border-border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs hover:bg-secondary/50 transition-all"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(idx * 0.04, 0.3) }}
+                  className="p-4 bg-secondary/30 border border-border rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs hover:bg-secondary/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
@@ -205,11 +210,12 @@ export default function CallingPage() {
                       </button>
                     )}
                   </div>
-                </div>
-              ))
+                </motion.div>
+              ))}
+              </AnimatePresence>
             )}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Plus, CheckSquare, Clock, CheckCircle, User } from "lucide-react";
 // Define client interfaces matching the database models
 export interface Task {
@@ -35,6 +35,7 @@ export interface Lead {
 }
 
 import { getEmployeesAction } from "@/lib/actions/crm.actions";
+import { Button, Card, Badge, Input, Select, Textarea, Modal, PageHeader } from "@/components/ui";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -157,29 +158,28 @@ export default function TasksPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-6">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Tasks Board</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Delegate workspace tasks, coordinate deadlines, and verify logs outputs.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md"
-        >
-          <Plus className="w-4 h-4" /> Create Task
-        </button>
-      </div>
+      <PageHeader
+        title="Tasks Board"
+        description="Delegate workspace tasks, coordinate deadlines, and verify logs outputs."
+        border
+        actions={
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="w-4 h-4" /> Create Task
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
         {/* Kanban Task Columns */}
         <div className="xl:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-          {columns.map((col) => {
+          {columns.map((col, colIdx) => {
             const colTasks = tasks.filter((t) => t.status === col);
             return (
-              <div
+              <motion.div
                 key={col}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: colIdx * 0.06 }}
                 className="bg-card/45 border border-border rounded-2xl p-4 flex flex-col gap-3 min-h-[500px]"
               >
                 <div className="flex justify-between items-center border-b border-border pb-2">
@@ -192,24 +192,22 @@ export default function TasksPage() {
                 </div>
 
                 <div className="flex-1 flex flex-col gap-3 overflow-y-auto max-h-[600px] scrollbar-none">
-                  {colTasks.map((task) => (
-                    <div
+                  {colTasks.map((task, rowIdx) => (
+                    <motion.div
                       key={task.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: colIdx * 0.06 + rowIdx * 0.04 }}
+                      whileHover={{ y: -3 }}
                       onClick={() => selectTask(task)}
-                      className={`bg-card border border-border p-4 rounded-xl shadow-xs cursor-pointer hover:shadow-md transition-all space-y-3 ${
+                      className={`bg-card border border-border p-4 rounded-xl shadow-xs cursor-pointer hover:shadow-md transition-shadow space-y-3 ${
                         activeTask?.id === task.id ? "ring-2 ring-indigo-500" : ""
                       }`}
                     >
                       <div className="flex justify-between items-start">
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                          task.priority === "CRITICAL"
-                            ? "bg-red-500/10 text-red-500"
-                            : task.priority === "HIGH"
-                            ? "bg-amber-500/10 text-amber-500"
-                            : "bg-indigo-500/10 text-indigo-500"
-                        }`}>
+                        <Badge tone={task.priority === "CRITICAL" ? "red" : task.priority === "HIGH" ? "amber" : "indigo"} className="text-[9px]">
                           {task.priority}
-                        </span>
+                        </Badge>
                         {task.dueDate && (
                           <span className="text-[9px] text-muted-foreground font-semibold flex items-center gap-1">
                             <Clock className="w-3 h-3" /> {new Date(task.dueDate).toLocaleDateString()}
@@ -247,16 +245,16 @@ export default function TasksPage() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
 
         {/* Task details & Comments panel drawer */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-6 flex flex-col h-[550px]">
+        <Card delay={0.2} className="p-6 space-y-6 flex flex-col h-[550px]">
           {activeTask ? (
             <div className="flex-1 flex flex-col min-h-0 space-y-4">
               <div className="border-b border-border pb-3">
@@ -275,47 +273,50 @@ export default function TasksPage() {
               {/* Status workflow */}
               <div className="flex gap-1.5 items-center justify-between">
                 <span className="text-xs text-muted-foreground font-bold">Status Action:</span>
-                <select
+                <Select
                   value={activeTask.status}
                   onChange={(e) => handleUpdateStatus(activeTask.id, e.target.value as Task["status"])}
-                  className="bg-secondary border border-border text-xs rounded-xl p-1.5 font-semibold outline-none text-indigo-500"
+                  className="w-auto p-1.5 font-semibold text-indigo-500"
                 >
                   <option value="TODO">To Do</option>
                   <option value="IN_PROGRESS">In Progress</option>
                   <option value="DONE">Completed</option>
-                </select>
+                </Select>
               </div>
 
               {/* Comments Scrollable log */}
               <div className="flex-1 flex flex-col min-h-0 space-y-3 pt-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Comments Feed</span>
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                  {taskComments.map((comm) => (
-                    <div key={comm.id} className="p-2.5 bg-secondary/30 border border-border/80 rounded-xl text-xs space-y-1">
+                  {taskComments.map((comm, idx) => (
+                    <motion.div
+                      key={comm.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="p-2.5 bg-secondary/30 border border-border/80 rounded-xl text-xs space-y-1"
+                    >
                       <div className="flex justify-between items-center font-bold text-[10px]">
                         <span className="text-indigo-400">{comm.user}</span>
                         <span className="text-slate-500 font-normal">{comm.date}</span>
                       </div>
                       <p className="text-muted-foreground leading-relaxed">{comm.text}</p>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
 
                 {/* Comment writing form */}
                 <div className="flex gap-2 border-t border-border pt-3">
-                  <input
+                  <Input
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Write a reply..."
-                    className="flex-1 px-3 py-1.5 bg-secondary border border-border rounded-xl text-xs outline-none"
+                    className="flex-1 px-3 py-1.5"
                     onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
                   />
-                  <button
-                    onClick={handleAddComment}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-md"
-                  >
+                  <Button size="sm" onClick={handleAddComment}>
                     Send
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -325,121 +326,99 @@ export default function TasksPage() {
               <span>Select any workspace task card to configure timelines, logs, and comments feed.</span>
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Create Task Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl p-6"
-            >
-              <h2 className="text-xl font-bold mb-4 border-b border-border pb-3">Create Workspace Task</h2>
-
-              <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1.5">Task Title / Operation Name</label>
-                  <input
-                    required
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Review SLA contract terms..."
-                    className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none text-foreground text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1.5">Detailed Task Description</label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Read SLA and align discount specifications..."
-                    className="w-full p-3 bg-secondary border border-border rounded-xl outline-none focus:border-indigo-500 min-h-20 resize-none text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1.5">Deadline Due Date</label>
-                  <input
-                    required
-                    type="datetime-local"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none text-foreground text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1.5">Priority Classification</label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as Task["priority"])}
-                    className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none font-semibold text-indigo-500 text-xs"
-                  >
-                    <option value="LOW">LOW</option>
-                    <option value="MEDIUM">MEDIUM</option>
-                    <option value="HIGH">HIGH</option>
-                    <option value="CRITICAL">CRITICAL</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1.5">Link opportunity contact (optional)</label>
-                  <select
-                    value={selectedLeadId}
-                    onChange={(e) => setSelectedLeadId(e.target.value)}
-                    className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none font-medium text-foreground text-xs"
-                  >
-                    <option value="">No Opportunity</option>
-                    {leads.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name} ({l.company})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1.5">Assign to Agent / Representative</label>
-                  <select
-                    required
-                    value={assignedToId}
-                    onChange={(e) => setAssignedToId(e.target.value)}
-                    className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none font-semibold text-indigo-500 text-xs"
-                  >
-                    <option value="">Select Agent</option>
-                    {employees.map((emp) => (
-                      <option key={emp.userId} value={emp.userId}>
-                        {emp.name} ({emp.role})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex justify-end gap-2 border-t border-border pt-4 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground font-semibold rounded-xl"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md"
-                  >
-                    Delegate Task
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Create Workspace Task" maxWidth="max-w-md">
+        <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
+          <div>
+            <label className="block font-bold text-slate-400 uppercase mb-1.5">Task Title / Operation Name</label>
+            <Input
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Review SLA contract terms..."
+              className="p-2.5"
+            />
           </div>
-        )}
-      </AnimatePresence>
+
+          <div>
+            <label className="block font-bold text-slate-400 uppercase mb-1.5">Detailed Task Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Read SLA and align discount specifications..."
+              className="p-3 min-h-20 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-400 uppercase mb-1.5">Deadline Due Date</label>
+            <Input
+              required
+              type="datetime-local"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="p-2.5"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-400 uppercase mb-1.5">Priority Classification</label>
+            <Select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as Task["priority"])}
+              className="p-2.5 font-semibold text-indigo-500"
+            >
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </Select>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-400 uppercase mb-1.5">Link opportunity contact (optional)</label>
+            <Select
+              value={selectedLeadId}
+              onChange={(e) => setSelectedLeadId(e.target.value)}
+              className="p-2.5 font-medium"
+            >
+              <option value="">No Opportunity</option>
+              {leads.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.company})
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-400 uppercase mb-1.5">Assign to Agent / Representative</label>
+            <Select
+              required
+              value={assignedToId}
+              onChange={(e) => setAssignedToId(e.target.value)}
+              className="p-2.5 font-semibold text-indigo-500"
+            >
+              <option value="">Select Agent</option>
+              {employees.map((emp) => (
+                <option key={emp.userId} value={emp.userId}>
+                  {emp.name} ({emp.role})
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4 mt-4">
+            <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit">Delegate Task</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

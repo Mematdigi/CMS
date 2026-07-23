@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Lead, WhatsappMessage } from "@prisma/client";
+import type { Lead, WhatsappMessage } from "@prisma/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Search, CheckCheck, AlertCircle, FileText, Image as ImageIcon, Check, MessageSquare } from "lucide-react";
+import { Button, Input, PageHeader, EmptyState } from "@/components/ui";
 
 const WHATSAPP_TEMPLATES = [
   { name: "welcome_template", body: "Hello {{name}}, welcome to Enterprise CRM! Let us know how we can support you." },
@@ -140,36 +141,43 @@ export default function WhatsappPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-border pb-4">
-        <h1 className="text-3xl font-extrabold tracking-tight font-sans">Meta WhatsApp Workspace</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          WhatsApp Business API templates management and customer conversations timeline.
-        </p>
-      </div>
+      <PageHeader
+        title="Meta WhatsApp Workspace"
+        description="WhatsApp Business API templates management and customer conversations timeline."
+        border
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 bg-card border border-border rounded-2xl shadow-sm overflow-hidden h-[600px]">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex flex-col md:grid md:grid-cols-3 bg-card border border-border rounded-2xl shadow-sm overflow-hidden h-auto md:h-[600px]"
+      >
         {/* Left Column - Chats list */}
-        <div className="border-r border-border flex flex-col h-full bg-secondary/10">
+        <div className="border-b md:border-b-0 border-r border-border flex flex-col h-72 md:h-full bg-secondary/10">
           <div className="p-4 border-b border-border bg-card">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
+              <Input
                 type="text"
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-secondary border border-border focus:border-indigo-500 rounded-xl text-xs outline-none transition-all"
+                className="pl-10"
               />
             </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-border/60">
-            {filteredLeads.map((lead) => {
+            {filteredLeads.map((lead, idx) => {
               const isActive = selectedLead?.id === lead.id;
               return (
-                <div
+                <motion.div
                   key={lead.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: Math.min(idx * 0.03, 0.3) }}
                   onClick={() => setSelectedLead(lead)}
-                  className={`p-4 flex items-center gap-3 cursor-pointer transition-all ${
+                  className={`p-4 flex items-center gap-3 cursor-pointer transition-colors ${
                     isActive ? "bg-indigo-500/5 text-indigo-500" : "hover:bg-secondary/40 text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -181,14 +189,14 @@ export default function WhatsappPage() {
                     <div className="text-slate-500 font-semibold truncate mt-0.5">{lead.company}</div>
                     <div className="text-[10px] text-indigo-400 font-medium truncate mt-1">{lead.phone}</div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
         </div>
 
         {/* Right Column - Chat Window */}
-        <div className="md:col-span-2 flex flex-col h-full bg-slate-900/5 dark:bg-transparent">
+        <div className="md:col-span-2 flex flex-col h-[480px] md:h-full bg-secondary/5">
           {selectedLead ? (
             <div className="flex-1 flex flex-col min-h-0">
               {/* Chat Header */}
@@ -203,36 +211,46 @@ export default function WhatsappPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
                     onClick={handleSendSamplePdf}
-                    className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-indigo-500 transition-all border border-border bg-card"
+                    className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-indigo-500 transition-colors border border-border bg-card"
                     title="Send proposal PDF copy"
                   >
                     <FileText className="w-4 h-4" />
-                  </button>
-                  <button
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
                     onClick={handleSendSampleImage}
-                    className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-indigo-500 transition-all border border-border bg-card"
+                    className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-indigo-500 transition-colors border border-border bg-card"
                     title="Send spec screenshot image"
                   >
                     <ImageIcon className="w-4 h-4" />
-                  </button>
+                  </motion.button>
                 </div>
               </div>
 
               {/* Chat Area bubble list */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950/20">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-secondary/10">
                 {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 text-xs">
-                    <AlertCircle className="w-10 h-10 text-slate-500" />
-                    <span>No WhatsApp messages logged for this contact. Use templates dropdown to send first message.</span>
+                  <div className="h-full flex items-center justify-center">
+                    <EmptyState
+                      icon={AlertCircle}
+                      title="No messages yet"
+                      description="No WhatsApp messages logged for this contact. Use templates dropdown to send first message."
+                    />
                   </div>
                 ) : (
-                  messages.map((msg) => {
+                  messages.map((msg, idx) => {
                     const isOut = msg.direction === "OUTBOUND";
                     return (
-                      <div
+                      <motion.div
                         key={msg.id}
+                        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ delay: Math.min(idx * 0.03, 0.3), duration: 0.25 }}
                         className={`flex ${isOut ? "justify-end" : "justify-start"}`}
                       >
                         <div
@@ -287,7 +305,7 @@ export default function WhatsappPage() {
                             )}
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })
                 )}
@@ -327,36 +345,33 @@ export default function WhatsappPage() {
                 </AnimatePresence>
 
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setShowTemplates(!showTemplates)}
-                    className="px-3 py-2 bg-secondary hover:bg-indigo-600/10 text-indigo-500 font-bold text-xs rounded-xl border border-border hover:border-indigo-500/20 transition-all whitespace-nowrap"
-                  >
+                  <Button variant="secondary" className="text-indigo-500 whitespace-nowrap" onClick={() => setShowTemplates(!showTemplates)}>
                     Use Template
-                  </button>
-                  <input
+                  </Button>
+                  <Input
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="Type WhatsApp chat message..."
-                    className="flex-1 px-4 py-2 bg-secondary border border-border focus:border-indigo-500 rounded-xl text-xs outline-none"
+                    className="flex-1 px-4 py-2"
                     onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                   />
-                  <button
-                    onClick={() => handleSendMessage()}
-                    className="p-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all shrink-0"
-                  >
+                  <Button size="icon" onClick={() => handleSendMessage()} className="shrink-0">
                     <Send className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground text-xs gap-3">
-              <MessageSquare className="w-12 h-12 text-slate-400" />
-              <span>Select any contact lead from sidebar layout to load WhatsApp business timeline logs.</span>
+            <div className="flex-1 flex items-center justify-center">
+              <EmptyState
+                icon={MessageSquare}
+                title="No conversation selected"
+                description="Select any contact lead from sidebar layout to load WhatsApp business timeline logs."
+              />
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

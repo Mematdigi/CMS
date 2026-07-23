@@ -19,9 +19,61 @@ import {
   Save,
   PenSquare,
   MessageSquare,
-  X,
+  ShoppingBag,
+  ExternalLink,
 } from "lucide-react";
-import { LeadActivity, WhatsappMessage } from "@prisma/client";
+import type { LeadActivity, WhatsappMessage } from "@prisma/client";
+
+function parseShopifyNote(details: string) {
+  if (!details.includes("Product URL:") && !details.includes("Variant ID:")) {
+    return null;
+  }
+
+  // Extract URL
+  const urlMatch = details.match(/Product\s*URL\s*:\s*(https?:\/\/[^\s]+)/i);
+  const url = urlMatch ? urlMatch[1] : null;
+
+  // Extract Variant ID
+  const variantMatch = details.match(/Variant\s*ID\s*:\s*([^\s]+)/i);
+  const variantId = variantMatch ? variantMatch[1] : null;
+
+  // Extract Quantity
+  const qtyMatch = details.match(/Quantity\s*:\s*([^\s]+)/i);
+  const quantity = qtyMatch ? qtyMatch[1] : null;
+
+  // Extract Customizations
+  let customizations = "";
+  const marker = "--- Customizations ---";
+  if (details.includes(marker)) {
+    customizations = details.split(marker)[1]?.trim() || "";
+  }
+
+  // Decode product title from URL slug
+  let productTitle = "Shopify Product";
+  if (url) {
+    try {
+      const parsedUrl = new URL(url);
+      const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+      const slug = pathSegments[pathSegments.length - 1];
+      if (slug) {
+        productTitle = decodeURIComponent(slug)
+          .split("-")
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+    } catch (e) {
+      console.error("Failed to parse product URL slug:", e);
+    }
+  }
+
+  return {
+    url,
+    variantId,
+    quantity,
+    customizations,
+    productTitle,
+  };
+}
 
 interface Employee {
   id: string;
@@ -85,6 +137,7 @@ export interface Lead {
 }
 import { useCRMStore } from "@/lib/store/useCRMStore";
 import { getEmployeesAction } from "@/lib/actions/crm.actions";
+import { Button, Badge, Modal, Select, Textarea } from "@/components/ui";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -165,13 +218,17 @@ export default function LeadDetailPage({ params }: PageProps) {
       }
 
       if (data.notes) {
-        logs.push({
-          id: "act-note",
-          leadId: id,
-          userId: "user-current",
-          action: "NOTE_ADDED",
-          details: `Note: ${data.notes}`,
-          createdAt: data.updatedAt || data.createdAt,
+        const noteEntries = data.notes.split(/\n\n+/);
+        noteEntries.forEach((noteText: string, index: number) => {
+          if (!noteText.trim()) return;
+          logs.push({
+            id: `act-note-${index}`,
+            leadId: id,
+            userId: "user-current",
+            action: "NOTE_ADDED",
+            details: noteText.startsWith("Note:") ? noteText : `Note: ${noteText}`,
+            createdAt: data.updatedAt || data.createdAt,
+          });
         });
       }
 
@@ -244,39 +301,41 @@ export default function LeadDetailPage({ params }: PageProps) {
   return (
     <div className="space-y-6">
       {/* Top action bar */}
-      <div className="flex items-center justify-between border-b border-border pb-4">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4"
+      >
         <Link
           href="/dashboard/leads"
-          className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all"
+          className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all group"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to pipeline
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" /> Back to pipeline
         </Link>
-        <div className="flex items-center gap-2">
-          <button
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            className="bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
             onClick={() => startCall(lead.id, lead.name, lead.phone)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md"
           >
             <PhoneCall className="w-4 h-4" /> Start Call
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               setWaMessage("");
               setWaTemplate("");
               setWaSendError("");
               setIsWaModalOpen(true);
             }}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md"
           >
             <MessageSquare className="w-4 h-4" /> Send WhatsApp
-          </button>
-          <button
-            onClick={() => setIsEditing(!isEditing)}
-            className="px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-xl border border-border flex items-center gap-2 transition-all"
-          >
+          </Button>
+          <Button variant="secondary" onClick={() => setIsEditing(!isEditing)}>
             <PenSquare className="w-4 h-4" /> {isEditing ? "View Details" : "Edit details"}
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Core contact card */}
@@ -478,26 +537,126 @@ export default function LeadDetailPage({ params }: PageProps) {
               <Activity className="w-4.5 h-4.5 text-indigo-500" /> Customer Activity History
             </h3>
             <div className="relative border-l-2 border-border pl-6 ml-2 space-y-6">
-              {activities.map((act) => (
-                <div key={act.id} className="relative">
-                  {/* Timeline icon indicator */}
-                  <div className="absolute -left-10 top-0.5 w-8 h-8 rounded-full bg-secondary border-2 border-border flex items-center justify-center text-slate-500">
-                    {act.action === "CALL_LOGGED" ? (
-                      <PhoneCall className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : act.action === "NOTE_ADDED" ? (
-                      <FileText className="w-3.5 h-3.5 text-amber-500" />
-                    ) : (
-                      <Activity className="w-3.5 h-3.5 text-indigo-500" />
-                    )}
+              {activities.map((act) => {
+                const shopifyInfo = act.action === "NOTE_ADDED" ? parseShopifyNote(act.details) : null;
+                
+                if (shopifyInfo) {
+                  return (
+                    <motion.div 
+                      key={act.id} 
+                      className="relative"
+                      initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
+                    >
+                      {/* Timeline icon indicator */}
+                      <div className="absolute -left-10 top-0.5 w-8 h-8 rounded-full bg-indigo-500/10 border-2 border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-2xs">
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="space-y-2">
+                        {/* Event Meta */}
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-[10px] text-muted-foreground font-bold font-mono">
+                            {new Date(act.createdAt).toLocaleString()}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-[9px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-widest">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                            </span>
+                            Shopify Order Intent
+                          </span>
+                        </div>
+
+                        {/* Premium Card Container */}
+                        <motion.div 
+                          className="mt-1 bg-white dark:bg-slate-900/40 border border-slate-250 dark:border-slate-800/80 hover:border-indigo-500/30 dark:hover:border-indigo-400/30 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 space-y-4"
+                          whileHover={{ y: -1.5, scale: 1.002 }}
+                        >
+                          {/* Product Info Block */}
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-extrabold uppercase tracking-wider text-indigo-500/90 dark:text-indigo-400/90">
+                                Shopify Storefront Product
+                              </span>
+                              <h4 className="text-sm font-extrabold text-foreground leading-snug tracking-tight">
+                                {shopifyInfo.productTitle}
+                              </h4>
+                            </div>
+                          </div>
+
+                          {/* Order Details Grid */}
+                          <div className="grid grid-cols-2 gap-3 border-y border-slate-100 dark:border-slate-850 py-3.5">
+                            <div className="space-y-1">
+                              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Variant Reference
+                              </span>
+                              <code className="inline-block text-[10px] font-bold font-mono text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/85 px-2 py-0.5 rounded-md border border-slate-200/40 dark:border-slate-700/50">
+                                {shopifyInfo.variantId || "N/A"}
+                              </code>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Requested Quantity
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400">
+                                {shopifyInfo.quantity || "1"} Unit(s)
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Customizations Specification */}
+                          {shopifyInfo.customizations && (
+                            <div className="bg-slate-50/50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/60 rounded-xl p-3.5 space-y-2">
+                              <span className="block font-extrabold text-[9px] uppercase tracking-wider text-slate-400">
+                                Option Customizations
+                              </span>
+                              <p className="text-xs whitespace-pre-wrap font-medium text-slate-650 dark:text-slate-300 leading-relaxed border-l-2 border-indigo-500 pl-3">
+                                {shopifyInfo.customizations}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Action Link Button */}
+                          {shopifyInfo.url && (
+                            <div className="pt-1 flex justify-end">
+                              <a
+                                href={shopifyInfo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50/50 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-indigo-100/50 dark:border-indigo-900/30 hover:border-indigo-200 dark:hover:border-indigo-850 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 transition-all duration-200 shadow-3xs hover:shadow-2xs active:scale-98"
+                              >
+                                View Product on Shopify <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          )}
+                        </motion.div>
+                      </div>
+                    </motion.div>
+                  );
+                }
+
+                return (
+                  <div key={act.id} className="relative">
+                    {/* Timeline icon indicator */}
+                    <div className="absolute -left-10 top-0.5 w-8 h-8 rounded-full bg-secondary border-2 border-border flex items-center justify-center text-slate-500">
+                      {act.action === "CALL_LOGGED" ? (
+                        <PhoneCall className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : act.action === "NOTE_ADDED" ? (
+                        <FileText className="w-3.5 h-3.5 text-amber-500" />
+                      ) : (
+                        <Activity className="w-3.5 h-3.5 text-indigo-500" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground font-bold">
+                        {new Date(act.createdAt).toLocaleString()}
+                      </span>
+                      <p className="text-xs font-semibold text-foreground mt-1 whitespace-pre-wrap">{act.details}</p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-muted-foreground font-bold">
-                      {new Date(act.createdAt).toLocaleString()}
-                    </span>
-                    <p className="text-xs font-semibold text-foreground mt-1">{act.details}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -518,22 +677,22 @@ export default function LeadDetailPage({ params }: PageProps) {
               </div>
             ) : (
               <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                {whatsappHistory.map((msg) => {
-                  let badgeColor = "bg-slate-500/10 text-slate-500 border border-slate-500/20";
-                  if (msg.status === "QUEUED") {
-                    badgeColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
-                  } else if (msg.status === "SENT") {
-                    badgeColor = "bg-blue-500/10 text-blue-500 border border-blue-500/20";
-                  } else if (msg.status === "DELIVERED") {
-                    badgeColor = "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
-                  } else if (msg.status === "READ") {
-                    badgeColor = "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20";
-                  } else if (msg.status === "FAILED") {
-                    badgeColor = "bg-rose-500/10 text-rose-500 border border-rose-500/20";
-                  }
+                {whatsappHistory.map((msg, idx) => {
+                  let tone: "slate" | "amber" | "sky" | "emerald" | "indigo" | "red" = "slate";
+                  if (msg.status === "QUEUED") tone = "amber";
+                  else if (msg.status === "SENT") tone = "sky";
+                  else if (msg.status === "DELIVERED") tone = "emerald";
+                  else if (msg.status === "READ") tone = "indigo";
+                  else if (msg.status === "FAILED") tone = "red";
 
                   return (
-                    <div key={msg.id} className="p-3 bg-secondary/20 border border-border/60 rounded-xl space-y-2">
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(idx * 0.04, 0.3) }}
+                      className="p-3 bg-secondary/20 border border-border/60 rounded-xl space-y-2"
+                    >
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-muted-foreground font-bold">
@@ -541,9 +700,7 @@ export default function LeadDetailPage({ params }: PageProps) {
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">• Sent by {msg.user?.name || "System"}</span>
                         </div>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${badgeColor}`}>
-                          {msg.status}
-                        </span>
+                        <Badge tone={tone} className="text-[9px]">{msg.status}</Badge>
                       </div>
                       <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{msg.messageBody}</p>
                       {msg.error && (
@@ -551,7 +708,7 @@ export default function LeadDetailPage({ params }: PageProps) {
                           <strong>Error Details:</strong> {msg.error}
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -593,113 +750,102 @@ export default function LeadDetailPage({ params }: PageProps) {
       </div>
 
       {/* WhatsApp Modal Dialog overlay */}
-      {isWaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-foreground">Send WhatsApp Message</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Recipient: {lead.name} ({lead.phone})</p>
-              </div>
-              <button 
-                onClick={() => setIsWaModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4 flex-1">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Select Message Template</label>
-                <select
-                  value={waTemplate}
-                  onChange={(e) => {
-                    const tplId = e.target.value;
-                    setWaTemplate(tplId);
-                    const selected = WHATSAPP_TEMPLATES.find(t => t.id === tplId);
-                    if (selected) {
-                      setWaMessage(selected.body.replace("{{name}}", lead.name));
-                    } else {
-                      setWaMessage("");
-                    }
-                  }}
-                  className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none text-xs text-indigo-500 font-semibold"
-                >
-                  <option value="">-- Free Text Message --</option>
-                  {WHATSAPP_TEMPLATES.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5 flex justify-between">
-                  <span>Message Body</span>
-                  <span className={`${waMessage.length > 1600 ? "text-rose-500" : "text-slate-400"}`}>
-                    {waMessage.length} characters
-                  </span>
-                </label>
-                <textarea
-                  value={waMessage}
-                  onChange={(e) => setWaMessage(e.target.value)}
-                  placeholder="Type your WhatsApp message..."
-                  className="w-full p-3 bg-secondary border border-border rounded-xl text-xs outline-none focus:border-indigo-500 min-h-36 resize-none"
-                />
-              </div>
-
-              {waSendError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl">
-                  {waSendError}
-                </div>
-              )}
-            </div>
-            
-            <div className="p-6 bg-secondary/30 border-t border-border flex justify-end gap-2">
-              <button
-                onClick={() => setIsWaModalOpen(false)}
-                disabled={isSendingWa}
-                className="px-4 py-2 text-xs font-semibold hover:bg-secondary rounded-xl transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (!waMessage.trim()) return;
-                  setIsSendingWa(true);
-                  setWaSendError("");
-                  try {
-                    const res = await fetch("/api/whatsapp/send", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        leadId: lead.id,
-                        messageBody: waMessage,
-                        templateName: waTemplate || undefined,
-                      })
-                    });
-                    const json = await res.json();
-                    if (json.success) {
-                      setIsWaModalOpen(false);
-                      loadData();
-                    } else {
-                      setWaSendError(json.error || "Failed to send message.");
-                    }
-                  } catch {
-                    setWaSendError("Network error sending message.");
-                  } finally {
-                    setIsSendingWa(false);
-                  }
-                }}
-                disabled={isSendingWa || !waMessage.trim()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md disabled:opacity-50"
-              >
-                {isSendingWa ? "Sending..." : "Send Message"}
-              </button>
-            </div>
+      <Modal
+        open={isWaModalOpen}
+        onClose={() => setIsWaModalOpen(false)}
+        maxWidth="max-w-lg"
+        title={
+          <div>
+            <h3 className="text-base font-bold text-foreground">Send WhatsApp Message</h3>
+            <p className="text-xs text-muted-foreground mt-0.5 font-normal">Recipient: {lead.name} ({lead.phone})</p>
           </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Select Message Template</label>
+            <Select
+              value={waTemplate}
+              onChange={(e) => {
+                const tplId = e.target.value;
+                setWaTemplate(tplId);
+                const selected = WHATSAPP_TEMPLATES.find(t => t.id === tplId);
+                if (selected) {
+                  setWaMessage(selected.body.replace("{{name}}", lead.name));
+                } else {
+                  setWaMessage("");
+                }
+              }}
+              className="p-2.5 text-indigo-500"
+            >
+              <option value="">-- Free Text Message --</option>
+              {WHATSAPP_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5 flex justify-between">
+              <span>Message Body</span>
+              <span className={`${waMessage.length > 1600 ? "text-rose-500" : "text-slate-400"}`}>
+                {waMessage.length} characters
+              </span>
+            </label>
+            <Textarea
+              value={waMessage}
+              onChange={(e) => setWaMessage(e.target.value)}
+              placeholder="Type your WhatsApp message..."
+              className="p-3 min-h-36 resize-none"
+            />
+          </div>
+
+          {waSendError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl">
+              {waSendError}
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="-mx-6 -mb-6 mt-6 p-6 bg-secondary/30 border-t border-border flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setIsWaModalOpen(false)} disabled={isSendingWa}>
+            Cancel
+          </Button>
+          <Button
+            loading={isSendingWa}
+            disabled={!waMessage.trim()}
+            onClick={async () => {
+              if (!waMessage.trim()) return;
+              setIsSendingWa(true);
+              setWaSendError("");
+              try {
+                const res = await fetch("/api/whatsapp/send", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    leadId: lead.id,
+                    messageBody: waMessage,
+                    templateName: waTemplate || undefined,
+                  })
+                });
+                const json = await res.json();
+                if (json.success) {
+                  setIsWaModalOpen(false);
+                  loadData();
+                } else {
+                  setWaSendError(json.error || "Failed to send message.");
+                }
+              } catch {
+                setWaSendError("Network error sending message.");
+              } finally {
+                setIsSendingWa(false);
+              }
+            }}
+          >
+            {isSendingWa ? "Sending..." : "Send Message"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { FileText, Download, Printer } from "lucide-react";
 import { exportToCSV, exportToExcel } from "@/lib/exports";
 import { getAuditLogsAction } from "@/lib/actions/crm.actions";
+import { Button, Card, PageHeader } from "@/components/ui";
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState<string | null>(null);
@@ -46,20 +47,16 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-border pb-4">
-        <h1 className="text-3xl font-extrabold tracking-tight">Reports Center</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Generate corporate compliance records, pipeline forecasts, and export files.
-        </p>
-      </div>
+      <PageHeader
+        title="Reports Center"
+        description="Generate corporate compliance records, pipeline forecasts, and export files."
+        border
+      />
 
       {/* Reports Card grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {reportsList.map((rep) => (
-          <div
-            key={rep.id}
-            className="bg-card border border-border p-6 rounded-2xl shadow-sm flex flex-col justify-between gap-6 hover-lift"
-          >
+        {reportsList.map((rep, i) => (
+          <Card key={rep.id} delay={i * 0.08} hoverLift glow className="p-6 flex flex-col justify-between gap-6">
             <div className="space-y-3">
               <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center">
                 <FileText className="w-5.5 h-5.5" />
@@ -69,28 +66,27 @@ export default function ReportsPage() {
             </div>
 
             <div className="flex gap-2 border-t border-border pt-4 text-xs font-bold">
-              <button
-                disabled={loading === rep.id}
+              <Button
+                variant="secondary"
+                loading={loading === rep.id}
                 onClick={() => handleExport("csv", rep.id)}
-                className="flex-1 py-2 bg-secondary hover:bg-secondary/80 text-foreground rounded-lg border border-border flex items-center justify-center gap-1.5 transition-all"
+                className="flex-1"
               >
                 <Download className="w-3.5 h-3.5" /> CSV
-              </button>
-              <button
-                disabled={loading === rep.id}
+              </Button>
+              <Button
+                variant="secondary"
+                loading={loading === rep.id}
                 onClick={() => handleExport("excel", rep.id)}
-                className="flex-1 py-2 bg-secondary hover:bg-secondary/80 text-foreground rounded-lg border border-border flex items-center justify-center gap-1.5 transition-all"
+                className="flex-1"
               >
                 <Download className="w-3.5 h-3.5" /> Excel
-              </button>
-              <button
-                onClick={handlePrint}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md"
-              >
+              </Button>
+              <Button onClick={handlePrint}>
                 <Printer className="w-3.5 h-3.5" /> Print PDF
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

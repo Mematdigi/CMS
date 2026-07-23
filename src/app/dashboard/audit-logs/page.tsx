@@ -11,7 +11,9 @@ export interface AuditLog {
   createdAt: string;
 }
 import { getAuditLogsAction } from "@/lib/actions/crm.actions";
-import { Search } from "lucide-react";
+import { Search, ShieldCheck } from "lucide-react";
+import { motion } from "framer-motion";
+import { Input, PageHeader, EmptyState, Badge } from "@/components/ui";
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -35,24 +37,23 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-border pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Security Audit Logs</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Real-time operations tracking compliance, logins, assignments, and data exports.
-          </p>
-        </div>
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search security audits..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-secondary border border-border focus:border-indigo-500 rounded-xl text-xs outline-none transition-all"
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Security Audit Logs"
+        description="Real-time operations tracking compliance, logins, assignments, and data exports."
+        border
+        actions={
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search security audits..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        }
+      />
 
       {/* Audits timeline list */}
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
@@ -70,28 +71,29 @@ export default function AuditLogsPage() {
             <tbody>
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                    No security audit logs match query search rules.
+                  <td colSpan={5} className="p-2">
+                    <EmptyState icon={ShieldCheck} title="No audit logs found" description="No security audit logs match query search rules." />
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map((log) => (
-                  <tr
+                filteredLogs.map((log, idx) => (
+                  <motion.tr
                     key={log.id}
-                    className="border-b border-border hover:bg-secondary/10 transition-all font-mono text-[11px]"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(idx * 0.03, 0.3) }}
+                    className="border-b border-border hover:bg-secondary/10 transition-colors font-mono text-[11px]"
                   >
                     <td className="p-4 text-slate-500">{new Date(log.createdAt).toLocaleString()}</td>
                     <td className="p-4 font-bold text-foreground">{log.userName}</td>
                     <td className="p-4">
-                      <span className="bg-indigo-500/10 text-indigo-500 font-bold px-2 py-0.5 rounded-full text-[10px]">
-                        {log.action}
-                      </span>
+                      <Badge tone="indigo" className="text-[10px]">{log.action}</Badge>
                     </td>
                     <td className="p-4 text-slate-500">{log.ipAddress}</td>
                     <td className="p-4 text-muted-foreground max-w-sm truncate" title={log.details}>
                       {log.details}
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))
               )}
             </tbody>

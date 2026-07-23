@@ -2,33 +2,25 @@
 
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import {
   Users,
-  TrendingUp,
   Clock,
   Phone,
   MessageSquare,
   CheckCircle,
   DollarSign,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  Legend,
-} from "recharts";
 import { getDashboardAnalyticsAction } from "@/lib/actions/crm.actions";
+import { PageHeader, StatCard, Card, Button, Skeleton } from "@/components/ui";
 
-const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+// Recharts is a large dependency (~100kB) only needed on this page — load it lazily,
+// client-side only, so it doesn't block the initial paint or bloat other routes.
+const ChartSkeleton = () => <Skeleton className="h-full w-full rounded-xl" />;
+const RevenueTrendChart = dynamic(() => import("@/components/dashboard/RevenueTrendChart"), { ssr: false, loading: ChartSkeleton });
+const LeadSourceChart = dynamic(() => import("@/components/dashboard/LeadSourceChart"), { ssr: false, loading: ChartSkeleton });
+const ConversionFunnelChart = dynamic(() => import("@/components/dashboard/ConversionFunnelChart"), { ssr: false, loading: ChartSkeleton });
+const EmployeePerformanceChart = dynamic(() => import("@/components/dashboard/EmployeePerformanceChart"), { ssr: false, loading: ChartSkeleton });
 
 const DEFAULT_EMPLOYEE_DATA = [
   { name: "John Sales", leads: 45, won: 12, rev: 48000 },
@@ -113,48 +105,42 @@ export default function DashboardPage() {
         value: totalLeadsVal.toLocaleString(),
         desc: "Updated in real-time from Postgres",
         icon: Users,
-        color: "text-indigo-500",
-        bg: "bg-indigo-500/10",
+        tone: "indigo" as const,
       },
       {
         title: "Active Conversations",
         value: "310",
         desc: "42 pending reply",
         icon: MessageSquare,
-        color: "text-emerald-500",
-        bg: "bg-emerald-500/10",
+        tone: "sky" as const,
       },
       {
         title: "Today's Follow-ups",
         value: "18",
         desc: "6 overdue reminder alerts",
         icon: Clock,
-        color: "text-amber-500",
-        bg: "bg-amber-500/10",
+        tone: "amber" as const,
       },
       {
         title: "Converted Deals (WON)",
         value: (analytics?.conversionFunnel?.find((f) => f.stage === "WON")?.value ?? 0).toLocaleString(),
         desc: "Average deal conversion indicator",
         icon: CheckCircle,
-        color: "text-teal-500",
-        bg: "bg-teal-500/10",
+        tone: "emerald" as const,
       },
       {
         title: "Monthly Recurring Revenue",
         value: `$${revVal.toLocaleString()}`,
         desc: "Prisma aggregated budgets value",
         icon: DollarSign,
-        color: "text-violet-500",
-        bg: "bg-violet-500/10",
+        tone: "violet" as const,
       },
       {
         title: "Missed Calls Logger",
         value: "4",
         desc: "Require callback",
         icon: Phone,
-        color: "text-rose-500",
-        bg: "bg-rose-500/10",
+        tone: "rose" as const,
       },
     ];
   }, [analytics]);
@@ -183,150 +169,66 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Enterprise Overview</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Real-time multi-tenant intelligence and sales pipelines metrics.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={fetchAnalytics}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all shadow-md"
-          >
-            Refresh Analytics
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Enterprise Overview"
+        description="Real-time multi-tenant intelligence and sales pipelines metrics."
+        actions={
+          <Button onClick={fetchAnalytics}>Refresh Analytics</Button>
+        }
+      />
 
       {/* Grid Cards metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {cards.map((card, i) => {
-          const Icon = card.icon;
-          return (
-            <motion.div
-              key={card.title}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-card border border-border p-6 rounded-2xl flex items-center justify-between hover-lift shadow-sm"
-            >
-              <div className="space-y-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                  {card.title}
-                </span>
-                <div className="text-3xl font-extrabold">{card.value}</div>
-                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  {card.desc}
-                </span>
-              </div>
-              <div className={`w-12 h-12 ${card.bg} ${card.color} rounded-xl flex items-center justify-center`}>
-                <Icon className="w-6 h-6" />
-              </div>
-            </motion.div>
-          );
-        })}
+        {cards.map((card, i) => (
+          <StatCard
+            key={card.title}
+            title={card.title}
+            value={card.value}
+            desc={card.desc}
+            icon={card.icon}
+            tone={card.tone}
+            delay={i * 0.05}
+          />
+        ))}
       </div>
 
       {/* Charts Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales & Revenue timelines */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+        <Card delay={0.1} hoverLift className="p-6 space-y-4">
           <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Revenue Target vs Actual</h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="colorTarget" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip contentStyle={{ background: "#0f172a", border: "none", borderRadius: "12px", color: "#fff", fontSize: "12px" }} />
-                <Legend verticalAlign="top" height={36} iconType="circle" />
-                <Area type="monotone" dataKey="Target" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorTarget)" />
-                <Area type="monotone" dataKey="Actual" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorActual)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <RevenueTrendChart data={revenueData} />
           </div>
-        </div>
+        </Card>
 
         {/* Lead Source distribution */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+        <Card delay={0.15} hoverLift className="p-6 space-y-4">
           <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Lead Acquisition Source</h3>
           <div className="h-80 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={leadSourceData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {leadSourceData.map((entry, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ background: "#0f172a", border: "none", borderRadius: "12px", color: "#fff", fontSize: "12px" }} />
-                <Legend verticalAlign="bottom" height={36} layout="horizontal" iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
+            <LeadSourceChart data={leadSourceData} />
           </div>
-        </div>
+        </Card>
 
         {/* Lead Conversion Funnel */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+        <Card delay={0.2} hoverLift className="p-6 space-y-4">
           <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Conversion Pipeline Funnel</h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={funnelData} margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                <XAxis type="number" stroke="#64748b" fontSize={11} />
-                <YAxis dataKey="stage" type="category" stroke="#64748b" fontSize={11} />
-                <Tooltip contentStyle={{ background: "#0f172a", border: "none", borderRadius: "12px", color: "#fff", fontSize: "12px" }} />
-                <Bar dataKey="count" fill="#6366f1" radius={[0, 8, 8, 0]}>
-                  {funnelData.map((entry, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <ConversionFunnelChart data={funnelData} />
           </div>
-        </div>
+        </Card>
 
         {/* Employee target stats */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+        <Card delay={0.25} hoverLift className="p-6 space-y-4">
           <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Top Employee Performance</h3>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={employeeData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip contentStyle={{ background: "#0f172a", border: "none", borderRadius: "12px", color: "#fff", fontSize: "12px" }} />
-                <Legend verticalAlign="top" height={36} iconType="circle" />
-                <Bar dataKey="leads" name="Leads Handled" fill="#6366f1" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="won" name="Deals Closed" fill="#10b981" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <EmployeePerformanceChart data={employeeData} />
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Campaigns list */}
-      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
+      <Card delay={0.3} className="p-6 space-y-4">
         <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider">Campaign Performance Metrics</h3>
         <div className="overflow-x-auto border border-border rounded-xl">
           <table className="w-full text-left border-collapse">
@@ -340,7 +242,13 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {campaignData.map((camp, idx: number) => (
-                <tr key={idx} className="border-b border-border text-sm hover:bg-secondary/10 transition-all">
+                <motion.tr
+                  key={idx}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.35 + idx * 0.05 }}
+                  className="border-b border-border text-sm hover:bg-secondary/10 transition-all"
+                >
                   <td className="p-4 font-semibold">{camp.name}</td>
                   <td className="p-4">${camp.cost.toLocaleString()}</td>
                   <td className="p-4">{camp.leads}</td>
@@ -349,12 +257,12 @@ export default function DashboardPage() {
                       {camp.roi}
                     </span>
                   </td>
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

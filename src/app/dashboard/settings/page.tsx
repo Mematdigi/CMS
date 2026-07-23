@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Settings as SettingsIcon, Mail, MessageSquare, Key, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { saveTenantSettingsAction } from "@/lib/actions/crm.actions";
+import { Button, Input, Select, PageHeader } from "@/components/ui";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"company" | "permissions" | "templates">("company");
@@ -46,15 +47,14 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-border pb-4">
-        <h1 className="text-3xl font-extrabold tracking-tight">Settings Portal</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Configure multi-tenant branding, role permissions matrix, templates, and smart rules.
-        </p>
-      </div>
+      <PageHeader
+        title="Settings Portal"
+        description="Configure multi-tenant branding, role permissions matrix, templates, and smart rules."
+        border
+      />
 
       {/* Tabs bar */}
-      <div className="flex gap-2 border-b border-border pb-px text-xs font-bold text-muted-foreground">
+      <div className="flex gap-2 border-b border-border text-xs font-bold text-muted-foreground relative overflow-x-auto whitespace-nowrap">
         {[
           { id: "company", label: "Company Profile & Rules", icon: SettingsIcon },
           { id: "permissions", label: "RBAC Permissions Matrix", icon: Key },
@@ -66,13 +66,18 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as "company" | "permissions" | "templates")}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all outline-none ${
-                isActive
-                  ? "border-indigo-500 text-indigo-500"
-                  : "border-transparent hover:text-foreground"
+              className={`relative flex items-center gap-2 px-4 py-3 transition-colors outline-none ${
+                isActive ? "text-indigo-500" : "hover:text-foreground"
               }`}
             >
               <Icon className="w-4 h-4" /> {tab.label}
+              {isActive && (
+                <motion.div
+                  layoutId="settingsTabIndicator"
+                  className="absolute left-0 right-0 -bottom-px h-0.5 bg-indigo-500"
+                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                />
+              )}
             </button>
           );
         })}
@@ -100,43 +105,30 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block font-bold text-slate-400 uppercase mb-1.5">Tenant Organization Name</label>
-                <input
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none"
-                />
+                <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="p-2.5" />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-400 uppercase mb-1.5">Subdomain Partition</label>
-                <input
-                  value={subdomain}
-                  onChange={(e) => setSubdomain(e.target.value)}
-                  className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none"
-                />
+                <Input value={subdomain} onChange={(e) => setSubdomain(e.target.value)} className="p-2.5" />
               </div>
 
               <div className="sm:col-span-2">
                 <label className="block font-bold text-slate-400 uppercase mb-1.5">Lead Smart Assignment Mode</label>
-                <select
+                <Select
                   value={assignmentMode}
                   onChange={(e) => setAssignmentMode(e.target.value)}
-                  className="w-full p-2.5 bg-secondary border border-border rounded-xl outline-none font-semibold text-indigo-500"
+                  className="p-2.5 font-semibold text-indigo-500"
                 >
                   <option value="ROUND_ROBIN">Round Robin Sequential Distribution</option>
                   <option value="RULES">Rule Matrix Evaluation (States / Products)</option>
                   <option value="MANUAL">Manual Ownership Delegation</option>
-                </select>
+                </Select>
               </div>
             </div>
 
             <div className="border-t border-border pt-4 mt-4 flex justify-end">
-              <button
-                type="submit"
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all"
-              >
-                Save General Settings
-              </button>
+              <Button type="submit" size="lg">Save General Settings</Button>
             </div>
           </motion.form>
         )}
@@ -164,8 +156,14 @@ export default function SettingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {permissions.map((p) => (
-                    <tr key={p.role} className="border-b border-border hover:bg-secondary/10 transition-all font-mono text-[11px]">
+                  {permissions.map((p, idx) => (
+                    <motion.tr
+                      key={p.role}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="border-b border-border hover:bg-secondary/10 transition-colors font-mono text-[11px]"
+                    >
                       <td className="p-4 font-bold text-foreground">{p.role}</td>
                       <td className="p-4 text-center">
                         <input
@@ -207,7 +205,7 @@ export default function SettingsPage() {
                           className="rounded accent-indigo-500 border-border"
                         />
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
@@ -226,7 +224,7 @@ export default function SettingsPage() {
             className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs"
           >
             {/* Email Templates card */}
-            <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+            <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4 hover-lift">
               <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Mail className="w-4.5 h-4.5 text-indigo-500" /> Default Email Templates
               </h3>
@@ -240,7 +238,7 @@ export default function SettingsPage() {
             </div>
 
             {/* WhatsApp Templates card */}
-            <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
+            <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4 hover-lift">
               <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <MessageSquare className="w-4.5 h-4.5 text-indigo-500" /> Meta WhatsApp Business Templates
               </h3>
