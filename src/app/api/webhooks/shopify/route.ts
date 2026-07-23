@@ -151,25 +151,64 @@ export async function POST(request: Request) {
     const budget = order.total_price ? parseFloat(order.total_price) : 0;
 
     // 4. Dedupe on shopifyOrderId — update if we've already recorded this order
-    const existingLead = await prisma.lead.findFirst({
+    //    (e.g. orders/create followed by orders/paid for the same order).
+    let existingLead = await prisma.lead.findFirst({
       where: { shopifyOrderId: orderId, isDeleted: false },
     });
 
+    // 5. No lead tied to this order yet — check whether this same customer already
+    //    has a lead from an earlier touchpoint (e.g. an add-to-cart form submission
+    //    via /api/leads) that hasn't been linked to an order. If so, attach the order
+    //    to that lead instead of creating a duplicate, so the cart-add -> order
+    //    journey shows up as one lead's progress rather than two separate leads.
+    let mergedFromCart = false;
+    if (!existingLead) {
+      existingLead = await prisma.lead.findFirst({
+        where: {
+          tenantId: "tenant-1",
+          isDeleted: false,
+          shopifyOrderId: null,
+          OR: [{ phone }, { email }],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      mergedFromCart = !!existingLead;
+    }
+
     if (existingLead) {
-      logDebug(`Existing lead found for Shopify order ${orderId}. Updating Lead ID: ${existingLead.id}`);
+      logDebug(
+        mergedFromCart
+          ? `Matched existing cart lead for ${email}/${phone}. Merging Shopify order ${orderId} into Lead ID: ${existingLead.id}`
+          : `Existing lead found for Shopify order ${orderId}. Updating Lead ID: ${existingLead.id}`,
+      );
+
+      const mergedNotes = existingLead.notes ? `${existingLead.notes}\n\n${notes}` : notes;
+      const terminalStatuses = ["WON", "LOST", "CLOSED"];
+      const nextStatus =
+        order.financial_status === "paid"
+          ? "WON"
+          : terminalStatuses.includes(existingLead.status)
+          ? existingLead.status
+          : "NEGOTIATION";
+
       const updatedLead = await prisma.lead.update({
         where: { id: existingLead.id },
         data: {
           name,
           phone,
           email,
-          notes,
+          notes: mergedNotes,
           budget,
+          shopifyOrderId: orderId,
+          status: nextStatus,
           updatedAt: new Date(),
         },
       });
       logDebug("Lead updated from Shopify order webhook.", updatedLead);
-      return NextResponse.json({ success: true, message: "Lead updated" });
+      return NextResponse.json({
+        success: true,
+        message: mergedFromCart ? "Order merged into existing cart lead" : "Lead updated",
+      });
     }
 
     logDebug("New Shopify order detected. Running smart assignment...");
@@ -193,7 +232,7 @@ export async function POST(request: Request) {
         budget,
         leadSource: "Shopify Store",
         shopifyOrderId: orderId,
-        status: "NEW",
+        status: order.financial_status === "paid" ? "WON" : "NEW",
         priority: "HIGH",
         createdById: "user-admin",
         assignedToId: assignedUser.userId,
