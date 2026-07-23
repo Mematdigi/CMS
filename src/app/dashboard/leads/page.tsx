@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
   FolderOpen,
   Phone,
+  Radio,
 } from "lucide-react";
 
 interface Employee {
@@ -466,6 +467,7 @@ export default function LeadsPage() {
                   </th>
                   <th className="p-4">Contact Detail</th>
                   <th className="p-4">Corporate Info</th>
+                  <th className="p-4">Source</th>
                   <th className="p-4">Stage Status</th>
                   <th className="p-4">Representative</th>
                   <th className="p-4 text-center">Actions</th>
@@ -474,7 +476,7 @@ export default function LeadsPage() {
               <tbody>
                 {leads.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-2">
+                    <td colSpan={7} className="p-2">
                       <EmptyState
                         icon={FolderOpen}
                         title="No pipeline leads found"
@@ -516,6 +518,12 @@ export default function LeadsPage() {
                       <td className="p-4">
                         <div className="font-semibold text-slate-700 dark:text-slate-300">{lead.company}</div>
                         <div className="text-xs text-muted-foreground">{lead.industry}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          <Radio className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          <span className="truncate">{lead.leadSource || "Unknown"}</span>
+                        </div>
                       </td>
                       <td className="p-4">
                         <Badge tone={lead.status === "WON" ? "emerald" : lead.status === "LOST" ? "red" : "indigo"}>
@@ -619,6 +627,10 @@ export default function LeadsPage() {
                       <div>
                         <div className="font-bold text-xs text-foreground truncate">{lead.name}</div>
                         <div className="text-[10px] text-muted-foreground truncate">{lead.company}</div>
+                      </div>
+                      <div className="flex items-center gap-1 text-[9px] font-semibold text-indigo-400 truncate">
+                        <Radio className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{lead.leadSource || "Unknown"}</span>
                       </div>
                       <div className="text-[10px] font-bold text-slate-500 flex justify-between border-t border-border/60 pt-2">
                         <span>Budget: ${lead.budget ? lead.budget.toLocaleString() : "0"}</span>

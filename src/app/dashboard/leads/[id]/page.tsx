@@ -11,6 +11,7 @@ import {
   Building2,
   Globe,
   Tag,
+  Radio,
   DollarSign,
   Plus,
   Activity,
@@ -423,6 +424,14 @@ export default function LeadDetailPage({ params }: PageProps) {
                     <div>
                       <span className="font-semibold text-[10px] uppercase text-slate-400">Marketing Campaign</span>
                       <p className="text-foreground font-medium mt-0.5">{lead.campaign?.name || "None"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-muted-foreground p-3 bg-secondary/30 rounded-xl">
+                    <Radio className="w-4.5 h-4.5 text-indigo-400" />
+                    <div>
+                      <span className="font-semibold text-[10px] uppercase text-slate-400">Lead Source</span>
+                      <p className="text-foreground font-medium mt-0.5">{lead.leadSource || "Unknown"}</p>
                     </div>
                   </div>
                 </div>

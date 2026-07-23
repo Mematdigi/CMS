@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef } from "react";
 import { animate, useMotionValue, useMotionValueEvent } from "framer-motion";
-
 export interface CountUpProps {
   value: number;
   duration?: number;
