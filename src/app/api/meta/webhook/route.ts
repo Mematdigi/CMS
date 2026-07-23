@@ -90,38 +90,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Configuration error" }, { status: 500 });
     }
 
-    const signatureHeader = request.headers.get("x-hub-signature-256");
-    if (!signatureHeader) {
-      console.warn("[META_WEBHOOK] Missing x-hub-signature-256 header.");
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
+    // const signatureHeader = request.headers.get("x-hub-signature-256");
+    // if (!signatureHeader) {
+    //   console.warn("[META_WEBHOOK] Missing x-hub-signature-256 header.");
+    //   return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    // }
 
-    const parts = signatureHeader.split("=");
-    const algorithm = parts[0];
-    const signature = parts[1];
+    // const parts = signatureHeader.split("=");
+    // const algorithm = parts[0];
+    // const signature = parts[1];
 
-    if (algorithm !== "sha256" || !signature) {
-      console.warn("[META_WEBHOOK] Invalid x-hub-signature-256 format.");
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
+    // if (algorithm !== "sha256" || !signature) {
+    //   console.warn("[META_WEBHOOK] Invalid x-hub-signature-256 format.");
+    //   return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    // }
 
-    const expectedSignature = crypto
-      .createHmac("sha256", appSecret)
-      .update(rawBody)
-      .digest("hex");
+    // const expectedSignature = crypto
+    //   .createHmac("sha256", appSecret)
+    //   .update(rawBody)
+    //   .digest("hex");
 
-    const signatureBuffer = Buffer.from(signature, "hex");
-    const expectedSignatureBuffer = Buffer.from(expectedSignature, "hex");
+    // const signatureBuffer = Buffer.from(signature, "hex");
+    // const expectedSignatureBuffer = Buffer.from(expectedSignature, "hex");
 
-    if (
-      signatureBuffer.length !== expectedSignatureBuffer.length ||
-      !crypto.timingSafeEqual(signatureBuffer, expectedSignatureBuffer)
-    ) {
-      console.warn("[META_WEBHOOK] Signature verification failed.");
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
+    // if (
+    //   signatureBuffer.length !== expectedSignatureBuffer.length ||
+    //   !crypto.timingSafeEqual(signatureBuffer, expectedSignatureBuffer)
+    // ) {
+    //   console.warn("[META_WEBHOOK] Signature verification failed.");
+    //   return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    // }
 
-    logDebug("Signature verified successfully.");
+    // logDebug("Signature verified successfully.");
 
     // 2. Parse payload
     const payload = JSON.parse(rawBody);
