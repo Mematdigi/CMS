@@ -1,14 +1,19 @@
 "use server";
 
 import { getServerSession } from "next-auth/next";
+import bcrypt from "bcryptjs";
 import { authOptions } from "@/lib/auth";
 import {
   EmployeeRepository,
+  EmployeeTargetRepository,
   AuditRepository,
   FollowupRepository,
 } from "@/lib/repositories/crm.repository";
 import { getPrisma } from "@/lib/prisma";
-import { UserRole } from "@prisma/client";
+import { UserRole, LeadStatus } from "@prisma/client";
+
+const DEFAULT_AVATAR = (name: string) =>
+  `https://ui-avatars.com/api/?background=6366f1&color=fff&bold=true&name=${encodeURIComponent(name)}`;
 
 async function verifySession() {
   const session = await getServerSession(authOptions);
@@ -18,11 +23,24 @@ async function verifySession() {
   return session;
 }
 
+async function verifyAdmin() {
+  const session = await verifySession();
+  const role = (session.user as { role?: string }).role;
+  if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+    throw new Error("Only admins can access this resource");
+  }
+  return session;
+}
+
 export async function getEmployeesAction() {
   const session = await verifySession();
   const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
-  
-  const [employees, wonLeads] = await Promise.all([
+
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  const [employees, wonLeads, currentTargets] = await Promise.all([
     EmployeeRepository.findMany(tenantId),
     getPrisma().lead.findMany({
       where: {
@@ -35,6 +53,7 @@ export async function getEmployeesAction() {
         budget: true,
       },
     }),
+    EmployeeTargetRepository.findManyForTenant(tenantId, currentMonth, currentYear),
   ]);
 
   const salesMap = new Map<string, number>();
@@ -42,6 +61,11 @@ export async function getEmployeesAction() {
     if (lead.assignedToId) {
       salesMap.set(lead.assignedToId, (salesMap.get(lead.assignedToId) || 0) + (lead.budget ? Number(lead.budget) : 0));
     }
+  }
+
+  const targetMap = new Map<string, number>();
+  for (const t of currentTargets) {
+    targetMap.set(t.employeeId, Number(t.targetAmount));
   }
 
   // Format Decimal values to numbers for serialization
@@ -52,17 +76,80 @@ export async function getEmployeesAction() {
     email: emp.user.email,
     role: emp.user.role,
     department: emp.department?.name || "General",
-    targetMonthly: Number(emp.targetMonthly),
+    // Falls back to the legacy flat targetMonthly until an admin sets a target for the current month
+    targetMonthly: targetMap.has(emp.id) ? targetMap.get(emp.id)! : Number(emp.targetMonthly),
+    hasCurrentMonthTarget: targetMap.has(emp.id),
     currentSalesMonthly: salesMap.get(emp.userId) || 0,
     conversionRate: Number(emp.conversionRate),
     attendanceCount: emp.attendanceCount,
     leaveBalance: emp.leaveBalance,
-    avatarUrl: `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150`,
+    avatarUrl: emp.user.avatarUrl || DEFAULT_AVATAR(emp.user.name),
+  }));
+}
+
+export async function setEmployeeTargetAction(data: {
+  employeeId: string;
+  month: number;
+  year: number;
+  targetAmount: number;
+}) {
+  const session = await verifySession();
+  const currentRole = (session.user as { role?: string }).role;
+  if (currentRole !== "ADMIN" && currentRole !== "SUPER_ADMIN") {
+    throw new Error("Only admins can set agent targets");
+  }
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
+  const setById = (session.user as { id?: string }).id;
+
+  if (!Number.isInteger(data.month) || data.month < 1 || data.month > 12) {
+    throw new Error("Invalid month");
+  }
+  if (!(data.targetAmount >= 0)) {
+    throw new Error("Target amount must be a positive number");
+  }
+
+  const employee = await EmployeeRepository.findById(data.employeeId);
+  if (!employee || (employee.user as { tenantId?: string }).tenantId !== tenantId) {
+    throw new Error("Employee not found");
+  }
+
+  const target = await EmployeeTargetRepository.upsert({
+    employeeId: data.employeeId,
+    month: data.month,
+    year: data.year,
+    targetAmount: data.targetAmount,
+    setById,
+  });
+
+  // Keep the legacy flat field in sync so it reflects the latest target set
+  await EmployeeRepository.update(data.employeeId, { targetMonthly: data.targetAmount });
+
+  return {
+    id: target.id,
+    employeeId: target.employeeId,
+    month: target.month,
+    year: target.year,
+    targetAmount: Number(target.targetAmount),
+  };
+}
+
+export async function getEmployeeTargetHistoryAction(employeeId: string) {
+  const session = await verifySession();
+  const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
+
+  const history = await EmployeeTargetRepository.findMany(employeeId, tenantId);
+
+  return history.map((t) => ({
+    id: t.id,
+    month: t.month,
+    year: t.year,
+    targetAmount: Number(t.targetAmount),
+    updatedAt: t.updatedAt.toISOString(),
   }));
 }
 
 export async function getAuditLogsAction() {
-  const session = await verifySession();
+  const session = await verifyAdmin();
   const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
   const logs = await AuditRepository.findMany(tenantId);
 
@@ -82,7 +169,7 @@ export async function saveTenantSettingsAction(data: {
   subdomain: string;
   assignmentMode: string;
 }) {
-  const session = await verifySession();
+  const session = await verifyAdmin();
   const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
 
   const prismaClient = getPrisma();
@@ -292,13 +379,17 @@ export async function getDashboardAnalyticsAction() {
 export async function createEmployeeAction(data: {
   name: string;
   email: string;
-  passwordHash: string;
+  password: string;
   role: string;
 }) {
   const session = await verifySession();
   const currentRole = (session.user as { role?: string }).role;
   if (currentRole !== "ADMIN" && currentRole !== "SUPER_ADMIN") {
     throw new Error("Only admins can create new employees");
+  }
+
+  if (data.password.length < 8) {
+    throw new Error("Password must be at least 8 characters long");
   }
 
   const tenantId = (session.user as { tenantId?: string }).tenantId || "tenant-1";
@@ -311,13 +402,15 @@ export async function createEmployeeAction(data: {
     throw new Error("User with this email already exists");
   }
 
+  const passwordHash = await bcrypt.hash(data.password, 10);
+
   // Create User
   const user = await getPrisma().user.create({
     data: {
       tenantId,
       name: data.name,
       email: data.email.toLowerCase(),
-      passwordHash: data.passwordHash,
+      passwordHash,
       role: data.role as UserRole,
       isActive: true,
     },
@@ -348,7 +441,117 @@ export async function createEmployeeAction(data: {
       conversionRate: Number(employee.conversionRate),
       attendanceCount: employee.attendanceCount,
       leaveBalance: employee.leaveBalance,
-      avatarUrl: `https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150`,
+      avatarUrl: DEFAULT_AVATAR(user.name),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Self-service profile: any authenticated user managing their own account.
+// ---------------------------------------------------------------------------
+
+const WON_STATUS: LeadStatus = "WON";
+const LOST_STATUS: LeadStatus = "LOST";
+const CLOSED_STATUSES: LeadStatus[] = ["WON", "LOST", "CLOSED"];
+
+export async function getMyProfileAction() {
+  const session = await verifySession();
+  const userId = (session.user as { id: string }).id;
+
+  const [user, employee, leads] = await Promise.all([
+    getPrisma().user.findUnique({ where: { id: userId } }),
+    getPrisma().employee.findUnique({ where: { userId } }),
+    getPrisma().lead.findMany({
+      where: { assignedToId: userId, isDeleted: false },
+      select: { id: true, name: true, company: true, budget: true, status: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const wonLeads = leads.filter((l) => l.status === WON_STATUS);
+  const lostLeads = leads.filter((l) => l.status === LOST_STATUS);
+  const inProgressLeads = leads.filter((l) => !CLOSED_STATUSES.includes(l.status));
+  const wonRevenue = wonLeads.reduce((sum, l) => sum + (l.budget ? Number(l.budget) : 0), 0);
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatarUrl: user.avatarUrl || DEFAULT_AVATAR(user.name),
+    employee: employee
+      ? {
+          targetMonthly: Number(employee.targetMonthly),
+          conversionRate: Number(employee.conversionRate),
+          attendanceCount: employee.attendanceCount,
+          leaveBalance: employee.leaveBalance,
+        }
+      : null,
+    leadStats: {
+      total: leads.length,
+      won: wonLeads.length,
+      lost: lostLeads.length,
+      inProgress: inProgressLeads.length,
+      wonRevenue,
+    },
+    recentClosedLeads: [...wonLeads, ...lostLeads]
+      .sort((a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime())
+      .slice(0, 8)
+      .map((l) => ({
+        id: l.id,
+        name: l.name,
+        company: l.company,
+        budget: l.budget ? Number(l.budget) : 0,
+        status: l.status,
+        updatedAt: l.updatedAt?.toISOString() ?? null,
+      })),
+  };
+}
+
+export async function updateMyProfileAction(data: { name?: string; avatarUrl?: string }) {
+  const session = await verifySession();
+  const userId = (session.user as { id: string }).id;
+
+  const updateData: { name?: string; avatarUrl?: string } = {};
+  if (data.name && data.name.trim()) updateData.name = data.name.trim();
+  if (data.avatarUrl) updateData.avatarUrl = data.avatarUrl;
+
+  const user = await getPrisma().user.update({
+    where: { id: userId },
+    data: updateData,
+  });
+
+  return { success: true, name: user.name, avatarUrl: user.avatarUrl };
+}
+
+export async function changeMyPasswordAction(data: { currentPassword: string; newPassword: string }) {
+  const session = await verifySession();
+  const userId = (session.user as { id: string }).id;
+
+  if (data.newPassword.length < 8) {
+    throw new Error("New password must be at least 8 characters long");
+  }
+
+  const user = await getPrisma().user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const isBcryptHash = /^\$2[aby]\$/.test(user.passwordHash);
+  const isMatch = isBcryptHash
+    ? await bcrypt.compare(data.currentPassword, user.passwordHash)
+    : user.passwordHash === data.currentPassword;
+
+  if (!isMatch) {
+    throw new Error("Current password is incorrect");
+  }
+
+  const newHash = await bcrypt.hash(data.newPassword, 10);
+  await getPrisma().user.update({ where: { id: userId }, data: { passwordHash: newHash } });
+
+  return { success: true };
 }

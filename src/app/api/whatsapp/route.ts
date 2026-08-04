@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { WhatsappRepository, LeadRepository } from "@/lib/repositories/crm.repository";
-import { twilioWhatsappClient } from "@/lib/providers/whatsapp/twilio-wa.provider";
+import { exotelWhatsappClient } from "@/lib/providers/whatsapp/exotel-wa.provider";
 
 export const runtime = "nodejs";
 
@@ -60,13 +60,13 @@ export async function POST(request: Request) {
     // Fetch the lead to get the REAL phone number (bypasses any masking)
     const lead = await LeadRepository.findById(leadId);
     if (lead?.phone) {
-      console.log(`[WhatsApp] Dispatching Twilio WhatsApp to ${lead.phone}: "${messageBody}"`);
-      const waResult = await twilioWhatsappClient.sendWhatsapp(lead.phone, messageBody);
+      console.log(`[WhatsApp] Dispatching Exotel messaging to ${lead.phone}: "${messageBody}"`);
+      const waResult = await exotelWhatsappClient.sendWhatsapp(lead.phone, messageBody);
       if (!waResult.success) {
         // Log warning but don't fail – message is already stored in DB
-        console.warn(`[WhatsApp] Twilio dispatch failed: ${waResult.error}. Message saved to DB only.`);
+        console.warn(`[WhatsApp] Exotel dispatch failed: ${waResult.error}. Message saved to DB only.`);
       } else {
-        console.log(`[WhatsApp] Twilio dispatch succeeded. SID: ${waResult.messageId}`);
+        console.log(`[WhatsApp] Exotel dispatch succeeded. SID: ${waResult.messageId}`);
       }
     }
 

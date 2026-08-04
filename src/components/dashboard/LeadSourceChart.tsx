@@ -7,6 +7,7 @@ const COLORS = ["#6366f1", "#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b", "#f43f5e"
 export interface LeadSourceItem {
   name: string;
   value: number;
+  
 }
 
 export default function LeadSourceChart({ data }: { data: LeadSourceItem[] }) {

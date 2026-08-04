@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button, Card, Input, PageHeader, EmptyState } from "@/components/ui";
 
 export default function CallingPage() {
-  const { startCall } = useCRMStore();
+  const { startCall, webrtcStatus } = useCRMStore();
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [typedNumber, setTypedNumber] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,7 +60,7 @@ export default function CallingPage() {
   };
 
   const handleManualDial = () => {
-    if (!typedNumber) return;
+    if (!typedNumber || webrtcStatus !== "ready") return;
     startCall("manual-call", "Outbound Call Session", typedNumber);
   };
 
@@ -123,7 +123,9 @@ export default function CallingPage() {
             </Button>
             <Button
               onClick={handleManualDial}
-              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-600/20"
+              disabled={webrtcStatus !== "ready"}
+              title={webrtcStatus === "ready" ? undefined : "Browser softphone not ready"}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <PhoneCall className="w-4 h-4" /> Dial
             </Button>

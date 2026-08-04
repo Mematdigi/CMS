@@ -9,6 +9,7 @@ export interface FunnelPoint {
   count: number;
 }
 
+console.log("colors.this.class.FunnelPoint")
 export default function ConversionFunnelChart({ data }: { data: FunnelPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%">

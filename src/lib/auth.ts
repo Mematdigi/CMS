@@ -1,7 +1,10 @@
 import "./env-clean";
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { getPrisma } from "@/lib/prisma";
+
+const BCRYPT_HASH_PATTERN = /^\$2[aby]\$/;
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -34,8 +37,21 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Match password (supports seeded plain-text check or hashing check)
-          const isMatch = password === "admin123" || user.passwordHash === password;
+          // Verify password. Legacy rows may still hold a plain-text value from
+          // before hashing was added — on a successful legacy match we transparently
+          // rehash it so every account converges on bcrypt without locking anyone out.
+          const storedHash = user.passwordHash;
+          const isBcryptHash = BCRYPT_HASH_PATTERN.test(storedHash);
+          let isMatch: boolean;
+          if (isBcryptHash) {
+            isMatch = await bcrypt.compare(password, storedHash);
+          } else {
+            isMatch = storedHash === password;
+            if (isMatch) {
+              const newHash = await bcrypt.hash(password, 10);
+              await getPrisma().user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+            }
+          }
           console.log("[NextAuth] Password match status:", isMatch);
 
           if (!isMatch) {

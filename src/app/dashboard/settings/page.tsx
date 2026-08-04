@@ -1,14 +1,31 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Settings as SettingsIcon, Mail, MessageSquare, Key, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { saveTenantSettingsAction } from "@/lib/actions/crm.actions";
 import { Button, Input, Select, PageHeader } from "@/components/ui";
 
 export default function SettingsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const role = (session?.user as { role?: string })?.role;
+  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+
+  useEffect(() => {
+    if (status === "authenticated" && !isAdmin) {
+      router.replace("/dashboard");
+    }
+  }, [status, isAdmin, router]);
+
   const [activeTab, setActiveTab] = useState<"company" | "permissions" | "templates">("company");
-  
+
+  if (status === "loading" || !isAdmin) {
+    return null;
+  }
+
   // Settings configurations
   const [companyName, setCompanyName] = useState("Enterprise Corporate Holdings");
   const [subdomain, setSubdomain] = useState("enterprise");

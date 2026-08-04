@@ -84,7 +84,7 @@ const leadFormSchema = zod.object({
 type LeadFormValues = zod.infer<typeof leadFormSchema>;
 
 export default function LeadsPage() {
-  const { startCall, user } = useCRMStore();
+  const { startCall, user, webrtcStatus } = useCRMStore();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -534,11 +534,12 @@ export default function LeadsPage() {
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2">
                           <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => startCall(lead.id, lead.name, lead.phone)}
-                            className="p-1.5 hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 rounded-lg border border-transparent hover:border-indigo-500/20 transition-colors"
-                            title="Click-to-Call Softphone"
+                            whileHover={webrtcStatus === "ready" ? { scale: 1.1 } : undefined}
+                            whileTap={webrtcStatus === "ready" ? { scale: 0.9 } : undefined}
+                            onClick={() => webrtcStatus === "ready" && startCall(lead.id, lead.name, lead.phone)}
+                            disabled={webrtcStatus !== "ready"}
+                            className="p-1.5 hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 rounded-lg border border-transparent hover:border-indigo-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            title={webrtcStatus === "ready" ? "Click-to-Call" : "Click-to-Call not ready"}
                           >
                             <Phone className="w-4 h-4" />
                           </motion.button>

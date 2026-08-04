@@ -321,6 +321,37 @@ export class EmployeeRepository {
   }
 }
 
+// EMPLOYEE TARGETS REPOS
+export class EmployeeTargetRepository {
+  static async upsert(data: {
+    employeeId: string;
+    month: number;
+    year: number;
+    targetAmount: number;
+    setById?: string;
+  }) {
+    const { employeeId, month, year, targetAmount, setById } = data;
+    return getPrisma().employeeTarget.upsert({
+      where: { employeeId_month_year: { employeeId, month, year } },
+      update: { targetAmount, setById },
+      create: { employeeId, month, year, targetAmount, setById },
+    });
+  }
+
+  static async findMany(employeeId: string, tenantId: string) {
+    return getPrisma().employeeTarget.findMany({
+      where: { employeeId, employee: { user: { tenantId } } },
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+    });
+  }
+
+  static async findManyForTenant(tenantId: string, month: number, year: number) {
+    return getPrisma().employeeTarget.findMany({
+      where: { month, year, employee: { user: { tenantId } } },
+    });
+  }
+}
+
 // AUDITS REPOS
 export class AuditRepository {
   static async findMany(tenantId: string) {

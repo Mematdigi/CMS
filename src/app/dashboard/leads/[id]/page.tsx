@@ -24,6 +24,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { LeadActivity, WhatsappMessage } from "@prisma/client";
+import { Linkify, humanizeEmbeddedJson } from "@/lib/utils/linkify";
 
 function parseShopifyNote(details: string) {
   if (!details.includes("Product URL:") && !details.includes("Variant ID:")) {
@@ -154,7 +155,7 @@ const WHATSAPP_TEMPLATES = [
 
 export default function LeadDetailPage({ params }: PageProps) {
   const router = useRouter();
-  const { startCall, user } = useCRMStore();
+  const { startCall, user, webrtcStatus } = useCRMStore();
   const { id } = use(params);
 
   const [lead, setLead] = useState<Lead | null>(null);
@@ -317,8 +318,10 @@ export default function LeadDetailPage({ params }: PageProps) {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="primary"
-            className="bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
-            onClick={() => startCall(lead.id, lead.name, lead.phone)}
+            className="bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={webrtcStatus !== "ready"}
+            title={webrtcStatus === "ready" ? undefined : "Click-to-Call not ready"}
+            onClick={() => webrtcStatus === "ready" && startCall(lead.id, lead.name, lead.phone)}
           >
             <PhoneCall className="w-4 h-4" /> Start Call
           </Button>
@@ -621,7 +624,7 @@ export default function LeadDetailPage({ params }: PageProps) {
                                 Option Customizations
                               </span>
                               <p className="text-xs whitespace-pre-wrap font-medium text-slate-650 dark:text-slate-300 leading-relaxed border-l-2 border-indigo-500 pl-3">
-                                {shopifyInfo.customizations}
+                                <Linkify text={shopifyInfo.customizations} />
                               </p>
                             </div>
                           )}
@@ -661,7 +664,9 @@ export default function LeadDetailPage({ params }: PageProps) {
                       <span className="text-[10px] text-muted-foreground font-bold">
                         {new Date(act.createdAt).toLocaleString()}
                       </span>
-                      <p className="text-xs font-semibold text-foreground mt-1 whitespace-pre-wrap">{act.details}</p>
+                      <p className="text-xs font-semibold text-foreground mt-1 whitespace-pre-wrap">
+                        <Linkify text={humanizeEmbeddedJson(act.details)} />
+                      </p>
                     </div>
                   </div>
                 );
@@ -712,6 +717,21 @@ export default function LeadDetailPage({ params }: PageProps) {
                         <Badge tone={tone} className="text-[9px]">{msg.status}</Badge>
                       </div>
                       <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{msg.messageBody}</p>
+                      {msg.mediaUrl && (
+                        <a
+                          href={msg.mediaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                        >
+                          {/\.pdf(\?|#|$)/i.test(msg.mediaUrl) ? (
+                            <FileText className="w-3.5 h-3.5" />
+                          ) : (
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          )}
+                          {/\.pdf(\?|#|$)/i.test(msg.mediaUrl) ? "View PDF Attachment" : "View Attachment"}
+                        </a>
+                      )}
                       {msg.error && (
                         <div className="text-[10px] text-rose-500 bg-rose-500/5 px-2.5 py-1 rounded-lg border border-rose-500/10">
                           <strong>Error Details:</strong> {msg.error}

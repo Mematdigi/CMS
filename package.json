@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@exotel-npm-dev/exotel-ip-calling-crm-websdk": "^1.2.2",
     "@hookform/resolvers": "^5.4.0",
     "@prisma/client": "^6.19.0",
     "@radix-ui/react-avatar": "^1.2.2",
@@ -23,6 +24,7 @@
     "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.80.0",
+    "cloudinary": "^2.10.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
     "ioredis": "^5.11.1",
@@ -51,6 +53,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.20",
     "prisma": "^6.19.0",
+    "raw-loader": "^4.0.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

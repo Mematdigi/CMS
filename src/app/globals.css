@@ -31,9 +31,10 @@
   
   --radius: 0.75rem;
 
-  --sidebar-background: #0f172a;
-  --sidebar-foreground: #f8fafc;
-  --sidebar-border: #1e293b;
+  --sidebar-background: #ffffff;
+  --sidebar-foreground: #1e293b;
+  --sidebar-muted-foreground: #64748b;
+  --sidebar-border: #e2e8f0;
 }
 
 .dark {
@@ -65,9 +66,10 @@
   --input: #1e293b;
   --ring: #6366f1;
 
-  --sidebar-background: #080c14;
+  --sidebar-background: #10182b;
   --sidebar-foreground: #f8fafc;
-  --sidebar-border: #131c2e;
+  --sidebar-muted-foreground: #94a3b8;
+  --sidebar-border: #1e293b;
 }
 
 @theme inline {
@@ -92,6 +94,7 @@
   --color-ring: var(--ring);
   --color-sidebar-bg: var(--sidebar-background);
   --color-sidebar-fg: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --border-radius-lg: var(--radius);
   --border-radius-md: calc(var(--radius) - 2px);

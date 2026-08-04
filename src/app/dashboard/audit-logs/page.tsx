@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 export interface AuditLog {
   id: string;
   userId: string;
@@ -16,6 +18,11 @@ import { motion } from "framer-motion";
 import { Input, PageHeader, EmptyState, Badge } from "@/components/ui";
 
 export default function AuditLogsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const role = (session?.user as { role?: string })?.role;
+  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [search, setSearch] = useState("");
 
@@ -24,8 +31,16 @@ export default function AuditLogsPage() {
   };
 
   useEffect(() => {
-    loadLogs();
-  }, []);
+    if (status === "authenticated" && !isAdmin) {
+      router.replace("/dashboard");
+      return;
+    }
+    if (isAdmin) loadLogs();
+  }, [status, isAdmin, router]);
+
+  if (status === "loading" || !isAdmin) {
+    return null;
+  }
 
   const filteredLogs = logs.filter(
     (l) =>

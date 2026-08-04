@@ -14,9 +14,12 @@ export interface ActiveCall {
   leadName: string;
   phone: string;
   durationSec: number;
-  status: "idle" | "ringing" | "connected" | "ended";
+  status: "idle" | "ringing" | "connected" | "ended" | "failed";
   isTriggered?: boolean;
+  error?: string;
 }
+
+export type WebrtcStatus = "connecting" | "ready" | "unavailable";
 
 export interface CRMUser {
   id: string;
@@ -34,6 +37,8 @@ interface CRMStoreState {
   activeCall: ActiveCall | null;
   incomingCall: { leadId: string; leadName: string; phone: string } | null;
   activeChatLeadId: string | null;
+  webrtcStatus: WebrtcStatus;
+  webrtcError: string | null;
 
   // Actions
   setUser: (user: CRMUser | null) => void;
@@ -45,8 +50,10 @@ interface CRMStoreState {
   startCall: (leadId: string, leadName: string, phone: string) => void;
   answerCall: () => void;
   endCall: () => void;
+  failCall: (error: string) => void;
   setIncomingCall: (incoming: { leadId: string; leadName: string; phone: string } | null) => void;
   setActiveChatLeadId: (leadId: string | null) => void;
+  setWebrtcStatus: (status: WebrtcStatus, error?: string | null) => void;
 }
 
 export const useCRMStore = create<CRMStoreState>((set) => ({
@@ -57,6 +64,8 @@ export const useCRMStore = create<CRMStoreState>((set) => ({
   activeCall: null,
   incomingCall: null,
   activeChatLeadId: null,
+  webrtcStatus: "connecting",
+  webrtcError: null,
 
   setUser: (user) => set({ user }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -83,6 +92,12 @@ export const useCRMStore = create<CRMStoreState>((set) => ({
       activeCall: state.activeCall ? { ...state.activeCall, status: "ended" } : null,
       incomingCall: null,
     })),
+  failCall: (error) =>
+    set((state) => ({
+      activeCall: state.activeCall ? { ...state.activeCall, status: "failed", error } : null,
+      incomingCall: null,
+    })),
   setIncomingCall: (incomingCall) => set({ incomingCall }),
   setActiveChatLeadId: (leadId) => set({ activeChatLeadId: leadId }),
+  setWebrtcStatus: (webrtcStatus, error) => set({ webrtcStatus, webrtcError: error ?? null }),
 }));

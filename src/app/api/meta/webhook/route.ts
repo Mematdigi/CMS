@@ -204,6 +204,12 @@ async function processLead({
 
     logDebug(`[${source}] Smart assignment determined recipient: ${assignedUser.userName} (ID: ${assignedUser.userId})`);
 
+    // Readable "key: value" lines instead of a raw JSON.stringify() blob, so
+    // the CRM activity timeline can display it as plain text.
+    const formFieldsText = Object.entries(fields)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join("\n");
+
     // Create new lead record
     const newLead = await prisma.lead.create({
       data: {
@@ -222,9 +228,7 @@ async function processLead({
         priority: "MEDIUM",
         createdById: "user-admin", // Created by system admin profile
         assignedToId: assignedUser.userId,
-        notes: `${leadSource.replace(" Ads", "")} Lead captured automatically via ${source}.\nLeadgen ID: ${leadgen_id}\nForm ID: ${form_id}\nPage ID: ${page_id}\nCreated Time: ${created_time}\nForm Fields: ${JSON.stringify(
-          fields
-        )}`,
+        notes: `${leadSource.replace(" Ads", "")} Lead captured automatically via ${source}.\nLeadgen ID: ${leadgen_id}\nForm ID: ${form_id}\nPage ID: ${page_id}\nCreated Time: ${created_time}\n\n--- Form Fields ---\n${formFieldsText}`,
       },
     });
 

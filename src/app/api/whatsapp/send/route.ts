@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { WhatsappRepository, LeadRepository } from "@/lib/repositories/crm.repository";
-import { twilioWhatsappClient } from "@/lib/providers/whatsapp/twilio-wa.provider";
+import { exotelWhatsappClient } from "@/lib/providers/whatsapp/exotel-wa.provider";
 
 export const runtime = "nodejs";
 
@@ -34,11 +34,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Lead does not have a phone number." }, { status: 400 });
     }
 
-    // Dispatch message via Twilio provider
+    // Dispatch message via Exotel provider
     console.log(`[API Send WhatsApp] Sending to lead ${leadId} (${lead.phone})`);
-    const result = await twilioWhatsappClient.sendWhatsapp(lead.phone, messageBody);
+    const result = await exotelWhatsappClient.sendWhatsapp(lead.phone, messageBody);
 
-    const fromNumber = process.env.TWILIO_WA_FROM || "whatsapp:+14155238886";
+    const fromNumber = process.env.EXOTEL_EXOPHONE || "09513886363";
     // Normalize destination number
     const cleanPhone = lead.phone.replace(/\s+/g, "").replace(/[\(\)\-]/g, "");
     const recipientNumber = cleanPhone.startsWith("+") ? cleanPhone : `+91${cleanPhone}`;

@@ -9,17 +9,36 @@ export interface Employee {
   role: string;
   department: string;
   targetMonthly: number;
+  hasCurrentMonthTarget?: boolean;
   currentSalesMonthly: number;
   conversionRate: number;
   attendanceCount: number;
   leaveBalance: number;
   avatarUrl: string;
 }
-import { getEmployeesAction, createEmployeeAction } from "@/lib/actions/crm.actions";
-import { UserCheck, Plus, Search, Trophy, Medal, Award, Users, TrendingUp, DollarSign } from "lucide-react";
+import {
+  getEmployeesAction,
+  createEmployeeAction,
+  setEmployeeTargetAction,
+  getEmployeeTargetHistoryAction,
+} from "@/lib/actions/crm.actions";
+import { UserCheck, Plus, Search, Trophy, Medal, Award, Users, TrendingUp, DollarSign, Target, History } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Button, Card, Input, Select, Modal, PageHeader, EmptyState, StatCard } from "@/components/ui";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+interface TargetHistoryEntry {
+  id: string;
+  month: number;
+  year: number;
+  targetAmount: number;
+  updatedAt: string;
+}
 
 const RANK_STYLES = [
   { icon: Trophy, ring: "ring-amber-400/60", badge: "from-amber-400 to-amber-600", glow: "shadow-amber-500/30" },
@@ -43,6 +62,20 @@ export default function EmployeesPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("SALES_EXECUTIVE");
+
+  // Set Target modal state
+  const now = useMemo(() => new Date(), []);
+  const [targetEmployee, setTargetEmployee] = useState<Employee | null>(null);
+  const [targetMonth, setTargetMonth] = useState(now.getMonth() + 1);
+  const [targetYear, setTargetYear] = useState(now.getFullYear());
+  const [targetAmount, setTargetAmount] = useState("");
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
+
+  // Target history modal state
+  const [historyEmployee, setHistoryEmployee] = useState<Employee | null>(null);
+  const [history, setHistory] = useState<TargetHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadEmployees = () => {
     getEmployeesAction()
@@ -136,6 +169,52 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openTargetModal = (emp: Employee) => {
+    setTargetEmployee(emp);
+    setTargetMonth(now.getMonth() + 1);
+    setTargetYear(now.getFullYear());
+    setTargetAmount(emp.targetMonthly ? String(emp.targetMonthly) : "");
+    setTargetError(null);
+  };
+
+  const handleSetTarget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetEmployee) return;
+    const amount = Number(targetAmount);
+    if (!targetAmount || Number.isNaN(amount) || amount < 0) {
+      setTargetError("Enter a valid target amount.");
+      return;
+    }
+
+    setTargetLoading(true);
+    setTargetError(null);
+    try {
+      await setEmployeeTargetAction({
+        employeeId: targetEmployee.id,
+        month: targetMonth,
+        year: targetYear,
+        targetAmount: amount,
+      });
+      setTargetEmployee(null);
+      loadEmployees();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      setTargetError(message);
+    } finally {
+      setTargetLoading(false);
+    }
+  };
+
+  const openHistoryModal = (emp: Employee) => {
+    setHistoryEmployee(emp);
+    setHistory([]);
+    setHistoryLoading(true);
+    getEmployeeTargetHistoryAction(emp.id)
+      .then(setHistory)
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
   };
 
   return (
@@ -251,28 +330,57 @@ export default function EmployeesPage() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={emp.avatarUrl}
-                    alt={emp.name}
-                    className={`w-12 h-12 rounded-full border border-border object-cover ${
-                      rankStyle ? `ring-2 ${rankStyle.ring} ring-offset-2 ring-offset-card` : ""
-                    }`}
-                  />
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-sm text-foreground truncate">{emp.name}</h3>
-                    <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider block w-max mt-1">
-                      {emp.role} • {emp.department}
-                    </span>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={emp.avatarUrl}
+                      alt={emp.name}
+                      className={`w-12 h-12 rounded-full border border-border object-cover ${
+                        rankStyle ? `ring-2 ${rankStyle.ring} ring-offset-2 ring-offset-card` : ""
+                      }`}
+                    />
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm text-foreground truncate">{emp.name}</h3>
+                      <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider block w-max mt-1">
+                        {emp.role} • {emp.department}
+                      </span>
+                    </div>
                   </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openTargetModal(emp)}
+                        title="Set target"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-indigo-500 hover:bg-indigo-500/10 transition-all"
+                      >
+                        <Target className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openHistoryModal(emp)}
+                        title="View target history"
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-indigo-500 hover:bg-indigo-500/10 transition-all"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Progress metrics */}
                 <div className="space-y-3 border-t border-border pt-4 text-xs">
                   <div className="space-y-1.5">
                     <div className="flex justify-between font-semibold text-slate-500">
-                      <span>Monthly Sales Target</span>
+                      <span>
+                        Monthly Sales Target
+                        {!emp.hasCurrentMonthTarget && (
+                          <span className="ml-1.5 text-[9px] normal-case font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                            not set this month
+                          </span>
+                        )}
+                      </span>
                       <span className="text-foreground">
                         ${emp.currentSalesMonthly.toLocaleString()} / ${emp.targetMonthly.toLocaleString()}
                       </span>
@@ -383,6 +491,106 @@ export default function EmployeesPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Set Target Modal */}
+      <Modal open={!!targetEmployee} onClose={() => setTargetEmployee(null)} maxWidth="max-w-md">
+        <h2 className="text-lg font-bold text-foreground mb-1">Set Target</h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Assign a monthly sales target for <span className="font-semibold text-foreground">{targetEmployee?.name}</span>.
+        </p>
+
+        {targetError && (
+          <div className="p-3 bg-rose-500/10 border border-rose-500/25 text-rose-500 text-xs rounded-xl mb-4 font-medium">
+            {targetError}
+          </div>
+        )}
+
+        <form onSubmit={handleSetTarget} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Month</label>
+              <Select
+                value={targetMonth}
+                onChange={(e) => setTargetMonth(Number(e.target.value))}
+                className="px-3 py-2"
+              >
+                {MONTH_NAMES.map((m, idx) => (
+                  <option key={m} value={idx + 1}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Year</label>
+              <Input
+                type="number"
+                required
+                value={targetYear}
+                onChange={(e) => setTargetYear(Number(e.target.value))}
+                className="px-3.5 py-2"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Amount ($)</label>
+            <Input
+              type="number"
+              required
+              min={0}
+              step="0.01"
+              value={targetAmount}
+              onChange={(e) => setTargetAmount(e.target.value)}
+              placeholder="60000"
+              className="px-3.5 py-2"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setTargetEmployee(null)} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" loading={targetLoading} className="flex-1">
+              {targetLoading ? "Saving..." : "Save Target"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Target History Modal */}
+      <Modal open={!!historyEmployee} onClose={() => setHistoryEmployee(null)} maxWidth="max-w-md">
+        <h2 className="text-lg font-bold text-foreground mb-1">Target History</h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Past targets set for <span className="font-semibold text-foreground">{historyEmployee?.name}</span>.
+        </p>
+
+        {historyLoading ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">Loading...</div>
+        ) : history.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">No targets have been set yet.</div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {history.map((h) => (
+              <div
+                key={h.id}
+                className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl text-xs"
+              >
+                <span className="font-semibold text-foreground">
+                  {MONTH_NAMES[h.month - 1]} {h.year}
+                </span>
+                <span className="font-bold text-indigo-500">${h.targetAmount.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="pt-4">
+          <Button type="button" variant="secondary" onClick={() => setHistoryEmployee(null)} className="w-full">
+            Close
+          </Button>
+        </div>
       </Modal>
     </div>
   );

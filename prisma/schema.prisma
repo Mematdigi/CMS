@@ -101,6 +101,7 @@ model User {
   email        String    @unique
   passwordHash String
   name         String
+  avatarUrl    String?
   role         UserRole  @default(SALES_EXECUTIVE)
   isActive     Boolean   @default(true)
   is2faEnabled Boolean   @default(false)
@@ -150,6 +151,24 @@ model Employee {
 
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  targets         EmployeeTarget[]
+}
+
+// 5b. Monthly Target History (Admin-assigned sales targets per employee per month)
+model EmployeeTarget {
+  id           String   @id @default(uuid()) @map("_id")
+  employeeId   String
+  month        Int      // 1-12
+  year         Int
+  targetAmount Float
+  setById      String?  // userId of the admin who set the target
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
 }
 
 // 6. Lead Model

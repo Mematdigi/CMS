@@ -5,7 +5,10 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useCRMStore } from "@/lib/store/useCRMStore";
-import type { Device, Call } from "@twilio/voice-sdk";
+// RE-ENABLED (2026-08-04): Exotel confirmed the account is live with test credits added.
+// See the two useEffects below. ivrfortius.com Click-to-Call is commented out, not
+// deleted, in case we need to fall back to it again.
+import { initExotelWebPhone, type ExotelWebPhone, type WebrtcCallEvent, type WebrtcCallDetails } from "@/lib/telephony/exotel-webrtc-client";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -31,10 +34,22 @@ import {
   X,
 } from "lucide-react";
 
+interface CallConnection {
+  accept: () => void;
+  reject: () => void;
+  disconnect: () => void;
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  // Stable identity to depend on instead of the `session` object itself — next-auth's
+  // SessionProvider refetches on window focus by default and returns a new object each
+  // time even when nothing changed, which would otherwise tear down and rebuild the
+  // Exotel WebRTC device (see the effect below) every time the browser tab regains focus.
+  const agentEmail = session?.user?.email;
+  const agentUserId = (session?.user as { id?: string } | undefined)?.id;
 
   const {
     sidebarOpen,
@@ -47,9 +62,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     activeCall,
     answerCall,
     endCall,
+    failCall,
     incomingCall,
     setIncomingCall,
     setUser,
+    webrtcStatus,
+    webrtcError,
+    setWebrtcStatus,
   } = useCRMStore();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,9 +95,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } catch { }
   };
 
-  // Twilio Client browser device state
-  const [twilioDevice, setTwilioDevice] = useState<Device | null>(null);
-  const [activeConnection, setActiveConnection] = useState<Call | null>(null);
+  const [activeConnection, setActiveConnection] = useState<CallConnection | null>(null);
+  const [exotelPhone, setExotelPhone] = useState<ExotelWebPhone | null>(null);
+  const exotelPhoneRef = useRef<ExotelWebPhone | null>(null);
   const callTriggeredRef = useRef<string | null>(null);
 
   // Auth Guard: Redirect if unauthenticated
@@ -97,69 +116,98 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [status, session, router, setUser]);
 
-  // Initialize Twilio WebRTC browser client device
+  // Initialize Exotel WebRTC browser softphone (test account, live credits confirmed 2026-08-04).
   useEffect(() => {
-    if (status !== "authenticated" || typeof window === "undefined" || !session?.user) return;
+    if (status !== "authenticated" || typeof window === "undefined" || !agentEmail) return;
 
-    let deviceInstance: Device | null = null;
+    let cancelled = false;
+    setWebrtcStatus("connecting");
 
-    fetch("/api/calls/token")
-      .then((res) => res.json())
-      .then(async (data) => {
-        if (!data.success || !data.token) {
-          console.warn("[Twilio Client] Failed to retrieve Voice Token:", data.error);
+    const handleCallEvent = (event: WebrtcCallEvent, details: WebrtcCallDetails) => {
+      const phone = exotelPhoneRef.current;
+      if (event === "incoming") {
+        // MakeCall() only triggers the call on Exotel's platform — Exotel then rings the
+        // *browser* back as a normal SIP call to bridge in the agent's audio, which the SDK
+        // reports as this same "incoming" event (there's no separate "your own outbound leg"
+        // event type). If we're mid-outbound-dial (activeCall is "ringing"), auto-accept
+        // immediately instead of surfacing an incoming-call banner for the agent's own call —
+        // otherwise the leg never gets answered, so it never reaches "connected" (timer stuck
+        // at 0) and no audio session is ever established (silence).
+        const currentActiveCall = useCRMStore.getState().activeCall;
+        if (currentActiveCall && currentActiveCall.status === "ringing") {
+          phone?.AcceptCall();
           return;
         }
 
-        const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
-        const device = new TwilioDevice(data.token, {
-          logLevel: "warn",
+        setActiveConnection({
+          accept: () => phone?.AcceptCall(),
+          reject: () => phone?.HangupCall(),
+          disconnect: () => phone?.HangupCall(),
         });
-        deviceInstance = device;
-
-        device.on("registered", () => {
-          console.log("[Twilio Client] Browser device registered successfully");
+        setIncomingCall({
+          leadId: "incoming-webrtc",
+          leadName: details.remoteDisplayName || "Incoming Customer (Web)",
+          phone: details.callFromNumber || details.remoteId || "Unknown Number",
         });
-
-        device.on("error", (error: { message: string }) => {
-          console.error("[Twilio Client] Device error:", error.message);
+      } else if (event === "connected") {
+        setActiveConnection({
+          accept: () => phone?.AcceptCall(),
+          reject: () => phone?.HangupCall(),
+          disconnect: () => phone?.HangupCall(),
         });
+        answerCall();
+      } else if (event === "callEnded") {
+        setActiveConnection(null);
+        endCall();
+      }
+    };
 
-        device.on("incoming", (connection: Call) => {
-          console.log("[Twilio Client] Incoming WebRTC call received");
-          setActiveConnection(connection);
-          setIncomingCall({
-            leadId: "incoming-webrtc",
-            leadName: "Incoming Customer (Web)",
-            phone: connection.parameters.From || "Unknown Number",
-          });
+    fetch("/api/calls/webrtc-token")
+      .then((res) => res.json())
+      .then(async (data) => {
+        if (cancelled) return;
+        if (!data.success || !data.accessToken || !data.userId) {
+          console.warn("[Exotel WebRTC] Failed to retrieve access token:", data.error);
+          setWebrtcStatus("unavailable", data.error || "Browser softphone unavailable.");
+          return;
+        }
 
-          connection.on("disconnect", () => {
-            console.log("[Twilio Client] Incoming call disconnected");
-            setActiveConnection(null);
-            endCall();
-          });
-        });
+        const webPhone = await initExotelWebPhone(data.accessToken, data.userId, handleCallEvent);
+        if (cancelled) return;
 
-        device.on("disconnect", () => {
-          console.log("[Twilio Client] WebRTC Call disconnected");
-          setActiveConnection(null);
-          endCall();
-        });
+        if (!webPhone) {
+          setWebrtcStatus("unavailable", "Failed to initialize Exotel browser softphone.");
+          return;
+        }
 
-        await device.register();
-        setTwilioDevice(device);
+        exotelPhoneRef.current = webPhone;
+        setExotelPhone(webPhone);
+        webPhone.RegisterDevice();
+        setWebrtcStatus("ready");
       })
       .catch((err) => {
-        console.warn("[Twilio Client] WebRTC Device initialization error:", err);
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn("[Exotel WebRTC] Device initialization error:", message);
+        setWebrtcStatus("unavailable", message);
       });
 
     return () => {
-      if (deviceInstance) {
-        deviceInstance.destroy();
-      }
+      cancelled = true;
+      exotelPhoneRef.current?.UnRegisterDevice();
+      exotelPhoneRef.current = null;
+      setExotelPhone(null);
     };
-  }, [status, session, endCall, setIncomingCall]);
+  }, [status, agentEmail, setWebrtcStatus, setIncomingCall, answerCall, endCall]);
+
+  // DISABLED (2026-08-04): ivrfortius.com Click-to-Call readiness — this was a stateless
+  // HTTP trigger with no browser SDK/session to register, so it was simply "ready" as soon
+  // as the agent was authenticated. Kept, commented out, in case ivrfortius is revisited.
+  //
+  // useEffect(() => {
+  //   if (status !== "authenticated") return;
+  //   setWebrtcStatus("ready");
+  // }, [status, setWebrtcStatus]);
 
   // Load realistic notifications
   useEffect(() => {
@@ -174,9 +222,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Real-time Pusher WebSockets subscription
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user) return;
-    const userId = (session.user as { id: string }).id;
-    if (!userId) return;
+    if (status !== "authenticated" || !agentUserId) return;
+    const userId = agentUserId;
 
     import("@/lib/pusher-client").then(({ pusherClient }) => {
       const channel = pusherClient.subscribe(`user-${userId}`);
@@ -208,7 +255,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         pusherClient.unsubscribe(`user-${userId}`);
       });
     };
-  }, [status, session, setNotifications, setIncomingCall, notifications]);
+  }, [status, agentUserId, setNotifications, setIncomingCall, notifications]);
 
   // Handle active call timer
   useEffect(() => {
@@ -223,68 +270,88 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => clearInterval(interval);
   }, [activeCall]);
 
-  // Trigger outbound call using Twilio WebRTC client or fallback to simulation
+  // Trigger outbound call via the Exotel WebRTC browser softphone. "connected" is reported
+  // asynchronously through the handleCallEvent listener registered in the device-init
+  // effect above (mirrors the old Twilio Client wiring).
   useEffect(() => {
-    if (!activeCall || activeCall.status === "ended" || activeCall.status === "idle") {
+    if (!activeCall || activeCall.status === "ended" || activeCall.status === "idle" || activeCall.status === "failed") {
       callTriggeredRef.current = null;
       return;
     }
 
     if (activeCall.status === "ringing") {
-      if (activeCall.isTriggered || callTriggeredRef.current === activeCall.leadId) {
+      if (callTriggeredRef.current === activeCall.leadId) {
         return;
       }
 
       callTriggeredRef.current = activeCall.leadId;
 
-      useCRMStore.setState({
-        activeCall: {
-          ...activeCall,
-          isTriggered: true,
-        },
-      });
-
-      if (twilioDevice) {
-        console.log(`[Twilio Client] Outbound WebRTC call placing to: ${activeCall.phone}`);
-
-        twilioDevice.connect({
-          params: {
-            To: activeCall.phone,
-            leadId: activeCall.leadId,
-          },
-        }).then((connection: Call) => {
-          setActiveConnection(connection);
-
-          connection.on("accept", () => {
-            console.log("[Twilio Client] Outbound call accepted by lead");
-            answerCall();
-          });
-
-          connection.on("disconnect", () => {
-            console.log("[Twilio Client] Call disconnected");
-            setActiveConnection(null);
-            endCall();
-          });
-
-          connection.on("error", (error: { message: string }) => {
-            console.error("[Twilio Client] Connection error:", error.message);
-            setActiveConnection(null);
-            endCall();
-          });
-        }).catch((err: Error) => {
-          console.error("[Twilio Client] Connection failed:", err);
-          endCall();
-        });
-
-      } else {
-        console.warn("[Twilio Client] WebRTC device not ready. Running in simulated mode.");
-        const timer = setTimeout(() => {
-          answerCall();
-        }, 5000);
-        return () => clearTimeout(timer);
+      if (!exotelPhone) {
+        console.warn("[Exotel WebRTC] Browser softphone not ready, cannot place call.");
+        failCall("Browser softphone not ready.");
+        return;
       }
+
+      console.log(`[Exotel WebRTC] Placing outbound call to: ${activeCall.phone}`);
+      exotelPhone.MakeCall(activeCall.phone, (status, data) => {
+        if (status !== "success") {
+          console.error("[Exotel WebRTC] MakeCall failed:", data);
+          failCall("Failed to place call via browser softphone.");
+        }
+      });
     }
-  }, [activeCall, activeCall?.status, twilioDevice, answerCall, endCall]);
+  }, [activeCall, activeCall?.status, exotelPhone, failCall]);
+
+  // DISABLED (2026-08-04): ivrfortius.com Click-to-Call outbound trigger — fired the
+  // ivrfortius.com Click-to-Call API, which rang the agent's configured number first and
+  // bridged to the lead once answered. There was no live in-browser audio or pickup
+  // webhook, so the call was marked "connected" as soon as the trigger request succeeded.
+  // Kept, commented out, in case ivrfortius is revisited.
+  //
+  // useEffect(() => {
+  //   if (!activeCall || activeCall.status === "ended" || activeCall.status === "idle" || activeCall.status === "failed") {
+  //     callTriggeredRef.current = null;
+  //     return;
+  //   }
+  //
+  //   if (activeCall.status === "ringing") {
+  //     if (callTriggeredRef.current === activeCall.leadId) {
+  //       return;
+  //     }
+  //
+  //     callTriggeredRef.current = activeCall.leadId;
+  //
+  //     const leadId = activeCall.leadId;
+  //     const phone = activeCall.phone;
+  //
+  //     console.log(`[Click-to-Call] Triggering call for Lead ID: ${leadId}`);
+  //     fetch("/api/calls/click-to-call", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ phone }),
+  //     })
+  //       .then((res) => res.json())
+  //       .then((json) => {
+  //         const currentActiveCall = useCRMStore.getState().activeCall;
+  //         if (!currentActiveCall || currentActiveCall.leadId !== leadId || currentActiveCall.status !== "ringing") {
+  //           return;
+  //         }
+  //         if (json.success) {
+  //           console.log("[Click-to-Call] Call triggered:", json);
+  //           answerCall();
+  //         } else {
+  //           console.error("[Click-to-Call] Failed to trigger call:", json.error);
+  //           failCall(json.error || "Click-to-Call request failed.");
+  //         }
+  //       })
+  //       .catch((err) => {
+  //         const message = err instanceof Error ? err.message : String(err);
+  //         console.error("[Click-to-Call] Request error:", message);
+  //         failCall(message);
+  //       });
+  //   }
+  // }, [activeCall, activeCall?.status, answerCall, failCall]);
+
 
   // Simulate an incoming call after 15 seconds of logging in
   useEffect(() => {
@@ -304,6 +371,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     signOut({ callbackUrl: "/login" });
   };
 
+  const userRole = (session?.user as { role?: string })?.role;
+  const isAdminRole = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
   const menuItems = [
     { name: "Analytics Dashboard", path: "/dashboard", icon: LayoutDashboard, color: "#6366f1" },
     { name: "Leads Management", path: "/dashboard/leads", icon: Users, color: "#0ea5e9" },
@@ -313,19 +383,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: "WhatsApp Business", path: "/dashboard/whatsapp", icon: MessageSquare, color: "#14b8a6" },
     { name: "Employee Targets", path: "/dashboard/employees", icon: UserCheck, color: "#d946ef" },
     { name: "Reports Center", path: "/dashboard/reports", icon: BarChart3, color: "#06b6d4" },
-    { name: "Security Audit Logs", path: "/dashboard/audit-logs", icon: ShieldCheck, color: "#f43f5e" },
-    { name: "Settings Portal", path: "/dashboard/settings", icon: SettingsIcon, color: "#94a3b8" },
+    ...(isAdminRole
+      ? [
+          { name: "Security Audit Logs", path: "/dashboard/audit-logs", icon: ShieldCheck, color: "#f43f5e" },
+          { name: "Settings Portal", path: "/dashboard/settings", icon: SettingsIcon, color: "#94a3b8" },
+        ]
+      : []),
   ];
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 animate-fade-in-up">
           <div className="relative w-12 h-12">
             <div className="absolute inset-0 border-4 border-indigo-500/20 rounded-full" />
             <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="text-slate-400 text-sm font-medium">Bootstrapping Secure Environment...</p>
+          <p className="text-muted-foreground text-sm font-medium">Bootstrapping Secure Environment...</p>
         </div>
       </div>
     );
@@ -366,7 +440,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <motion.aside
         animate={{ width: sidebarOpen ? 256 : 80 }}
         transition={{ type: "spring", stiffness: 300, damping: 32 }}
-        className={`fixed md:relative inset-y-0 left-0 h-full max-md:!w-72 bg-gradient-to-b from-slate-950 via-sidebar-bg to-slate-950 text-sidebar-fg border-r border-sidebar-border flex flex-col shrink-0 z-40 overflow-hidden transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed md:relative inset-y-0 left-0 h-full max-md:!w-72 bg-sidebar-bg text-sidebar-fg border-r border-sidebar-border flex flex-col shrink-0 z-40 overflow-hidden transition-transform duration-300 ease-in-out md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -390,7 +464,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -8 }}
                 transition={{ duration: 0.2 }}
-                className="font-bold text-lg bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent truncate whitespace-nowrap flex-1"
+                className="font-bold text-lg text-sidebar-fg truncate whitespace-nowrap flex-1"
               >
                 Enterprise CRM
               </motion.span>
@@ -398,7 +472,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </AnimatePresence>
           <button
             onClick={() => setMobileSidebarOpen(false)}
-            className="md:hidden ml-auto p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+            className="md:hidden ml-auto p-1.5 hover:bg-sidebar-border/60 rounded-lg text-sidebar-muted hover:text-sidebar-fg transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -419,7 +493,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => setClickedPath(item.path)}
                 style={{ "--item-color": item.color } as React.CSSProperties}
                 className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group relative active:scale-[0.98] ${
-                  isActive ? "text-white shadow-lg" : "hover:bg-white/5 text-slate-400 hover:text-white hover:translate-x-0.5"
+                  isActive ? "text-white shadow-lg" : "hover:bg-sidebar-border/50 text-sidebar-muted hover:text-sidebar-fg hover:translate-x-0.5"
                 }`}
               >
                 {isActive && (
@@ -435,12 +509,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 )}
                 <Icon
                   className={`w-5 h-5 shrink-0 transition-colors duration-200 ${
-                    isActive ? "text-white" : "text-slate-400 group-hover:text-[var(--item-color)]"
+                    isActive ? "text-white" : "text-sidebar-muted group-hover:text-[var(--item-color)]"
                   }`}
                 />
                 {showExpanded && <span className="truncate transition-colors duration-200 whitespace-nowrap">{item.name}</span>}
                 {!showExpanded && (
-                  <div className="absolute left-16 bg-slate-950 text-white text-xs font-semibold px-3 py-1.5 rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 shadow-xl whitespace-nowrap z-50 translate-x-1 group-hover:translate-x-0 border-l-2" style={{ borderColor: item.color }}>
+                  <div className="absolute left-16 bg-slate-900 text-white text-xs font-semibold px-3 py-1.5 rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 shadow-xl whitespace-nowrap z-50 translate-x-1 group-hover:translate-x-0 border-l-2" style={{ borderColor: item.color }}>
                     {item.name}
                   </div>
                 )}
@@ -455,7 +529,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={toggleSidebar}
-            className="w-full py-2 bg-white/5 hover:bg-gradient-to-r hover:from-indigo-600/20 hover:to-violet-600/20 border border-sidebar-border/30 hover:border-indigo-500/40 text-slate-400 hover:text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2 bg-sidebar-border/30 hover:bg-gradient-to-r hover:from-indigo-600/20 hover:to-violet-600/20 border border-sidebar-border/30 hover:border-indigo-500/40 text-sidebar-muted hover:text-sidebar-fg rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2"
           >
             <motion.span animate={{ rotate: sidebarOpen ? 0 : 180 }} transition={{ duration: 0.3 }}>
               «
@@ -521,6 +595,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </motion.span>
               </AnimatePresence>
             </motion.button>
+
+            {/* Browser Softphone Status */}
+            <div
+              title={webrtcStatus === "unavailable" ? (webrtcError || "Browser softphone unavailable.") : undefined}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${
+                webrtcStatus === "ready"
+                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                  : webrtcStatus === "connecting"
+                  ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                  : "bg-red-500/10 text-red-500 border-red-500/20"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  webrtcStatus === "ready"
+                    ? "bg-emerald-500"
+                    : webrtcStatus === "connecting"
+                    ? "bg-amber-500 animate-pulse"
+                    : "bg-red-500"
+                }`}
+              />
+              {webrtcStatus === "ready" ? "Softphone Ready" : webrtcStatus === "connecting" ? "Connecting..." : "Softphone Unavailable"}
+            </div>
 
             {/* Notifications Alert Center */}
             <div className="relative">
@@ -672,7 +769,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="text-sm font-bold truncate mt-0.5">{activeCall.leadName}</div>
                   <div className="text-[10px] text-slate-500 truncate">{activeCall.phone}</div>
                 </div>
-                {activeCall.status === "ended" ? (
+                {activeCall.status === "ended" || activeCall.status === "failed" ? (
                   <button
                     onClick={() => useCRMStore.setState({ activeCall: null })}
                     className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-all cursor-pointer"
@@ -722,7 +819,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             userId: "user-current",
                             durationSec: callTimer,
                             callType: "OUTGOING",
-                            notes: "Customer call completed via click-to-call softphone.",
+                            notes: "Customer call completed via browser softphone.",
                           }),
                         });
                       } catch { }
@@ -731,6 +828,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
                   >
                     <PhoneOff className="w-4 h-4" /> End Call
+                  </button>
+                </div>
+              ) : activeCall.status === "failed" ? (
+                <div className="flex flex-col gap-2">
+                  <div className="text-xs text-red-400 text-center py-2 font-medium break-words">
+                    Call failed: {activeCall.error || "Browser softphone unavailable."}
+                  </div>
+                  <button
+                    onClick={() => useCRMStore.setState({ activeCall: null })}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-xl transition-all text-slate-300 cursor-pointer"
+                  >
+                    Dismiss Widget
                   </button>
                 </div>
               ) : (
