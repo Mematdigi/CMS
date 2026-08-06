@@ -375,20 +375,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // }, [activeCall, activeCall?.status, answerCall, failCall]);
 
 
-  // Simulate an incoming call after 15 seconds of logging in
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!activeCall && !incomingCall) {
-        setIncomingCall({
-          leadId: "lead-2",
-          leadName: "Sophia Martinez",
-          phone: "+1 (555) 304-9811",
-        });
-      }
-    }, 15000);
-    return () => clearTimeout(timer);
-  }, [activeCall, incomingCall, setIncomingCall]);
-
   const handleSignOut = () => {
     signOut({ callbackUrl: "/login" });
   };

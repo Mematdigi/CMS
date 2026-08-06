@@ -151,7 +151,7 @@ export default function EmployeesPage() {
       const res = await createEmployeeAction({
         name,
         email,
-        passwordHash: password,
+        password,
         role,
       });
 

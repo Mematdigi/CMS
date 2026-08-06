@@ -22,10 +22,6 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<"company" | "permissions" | "templates">("company");
 
-  if (status === "loading" || !isAdmin) {
-    return null;
-  }
-
   // Settings configurations
   const [companyName, setCompanyName] = useState("Enterprise Corporate Holdings");
   const [subdomain, setSubdomain] = useState("enterprise");
@@ -41,6 +37,10 @@ export default function SettingsPage() {
     { role: "SALES_EXECUTIVE", view: true, create: true, edit: true, delete: false, export: false },
     { role: "VIEWER", view: true, create: false, edit: false, delete: false, export: false },
   ]);
+
+  if (status === "loading" || !isAdmin) {
+    return null;
+  }
 
   const togglePermission = (roleName: string, field: "view" | "create" | "edit" | "delete" | "export") => {
     setPermissions((prev) =>

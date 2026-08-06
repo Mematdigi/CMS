@@ -121,6 +121,22 @@ async function ensureAppSettingConfigured(): Promise<void> {
   if (!configured) {
     await setExotelAppSetting("record", "true");
   }
+  await ensurePopupUrlConfigured();
+}
+
+/**
+ * Registers our webhook as Exotel's "popup_url" — required for inbound PSTN calls to an
+ * Exophone to route to a browser-registered agent (AppUserId) at all, per Exotel's
+ * IP-PSTN Intermix WebRTC docs. Re-sent on every token fetch (cheap, idempotent) so it
+ * self-heals the same way the "record" setting does whenever Exotel recreates our App.
+ * Skipped when NEXTAUTH_URL is still localhost, since Exotel's servers can't reach that.
+ */
+async function ensurePopupUrlConfigured(): Promise<void> {
+  const baseUrl = process.env.NEXTAUTH_URL || "";
+  if (!baseUrl || baseUrl.includes("localhost")) {
+    return;
+  }
+  await setExotelAppSetting("popup_url", `${baseUrl}/api/calls/exotel-webrtc-incoming`);
 }
 
 /**
