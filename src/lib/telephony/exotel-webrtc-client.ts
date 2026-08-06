@@ -29,7 +29,8 @@ export async function initExotelWebPhone(
   accessToken: string,
   userId: string,
   onCallEvent: (event: WebrtcCallEvent, details: WebrtcCallDetails) => void,
-  onRegisterEvent?: (state: string) => void
+  onRegisterEvent?: (state: string) => void,
+  onSessionEvent?: (state: string, sipInfo: unknown) => void
 ): Promise<ExotelWebPhone | null> {
   const { default: ExotelCRMWebSDK } = await import("@exotel-npm-dev/exotel-ip-calling-crm-websdk");
 
@@ -38,13 +39,18 @@ export async function initExotelWebPhone(
   // reference first — the SDK class uses private (#) fields internally, so calling the
   // method detached from its `sdk` receiver throws "Cannot read private member from an
   // object whose class did not declare it".
-  // The SDK's shipped .d.ts also mistypes softPhoneRegisterEventCallBack as `null`-only
-  // even though the implementation accepts a callback; cast to work around that bug.
+  // Initialize takes 3 callbacks (listener, register, session) — the SDK only assigns its
+  // internal handler `if (callback)` for the 2nd/3rd ones, so omitting either leaves it
+  // undefined and the SDK crashes the moment that event type fires ("X is not a function").
+  // Always pass all three, even if a caller only cares about one. The SDK's shipped .d.ts
+  // also mistypes both optional callbacks as `null`-only even though the implementation
+  // accepts real callbacks; cast to work around that bug.
   const initialize = sdk.Initialize.bind(sdk) as (
     listener: typeof onCallEvent,
-    registerCb: typeof onRegisterEvent | null
+    registerCb: typeof onRegisterEvent | null,
+    sessionCb: typeof onSessionEvent | null
   ) => Promise<ExotelWebPhone | void>;
-  const webPhone = await initialize(onCallEvent, onRegisterEvent || null);
+  const webPhone = await initialize(onCallEvent, onRegisterEvent || null, onSessionEvent || null);
 
   if (!webPhone) {
     return null;

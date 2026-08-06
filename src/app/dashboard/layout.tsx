@@ -162,6 +162,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     };
 
+    // The SDK's Initialize() only assigns its internal register-event handler when this
+    // callback is truthy — omitting it (as before) left the handler undefined, and the SDK
+    // crashes internally every time a registration state event fires: "TypeError:
+    // this._softPhoneRegisterEventCallBack is not a function". A real handler also lets us
+    // report webrtcStatus from the actual SIP registration outcome instead of guessing.
+    const handleRegisterEvent = (state: string) => {
+      console.log("[Exotel WebRTC] Register event:", state);
+      if (state === "connected") {
+        setWebrtcStatus("ready");
+      } else if (state === "failed_to_start" || state === "transport_error") {
+        setWebrtcStatus("unavailable", "Browser softphone registration failed.");
+      }
+    };
+
+    // Same class of bug as handleRegisterEvent above: the SDK only wires its internal
+    // session-event handler when this 3rd callback is truthy, otherwise it crashes with
+    // "this._softPhoneSessionCallback is not a function" the moment a session event fires.
+    // No documented session states to act on yet — just needs to exist.
+    const handleSessionEvent = (state: string, sipInfo: unknown) => {
+      console.log("[Exotel WebRTC] Session event:", state, sipInfo);
+    };
+
     fetch("/api/calls/webrtc-token")
       .then((res) => res.json())
       .then(async (data) => {
@@ -172,7 +194,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return;
         }
 
-        const webPhone = await initExotelWebPhone(data.accessToken, data.userId, handleCallEvent);
+        const webPhone = await initExotelWebPhone(data.accessToken, data.userId, handleCallEvent, handleRegisterEvent, handleSessionEvent);
         if (cancelled) return;
 
         if (!webPhone) {

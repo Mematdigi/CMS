@@ -138,6 +138,7 @@ export interface Lead {
   } | null;
 }
 import { useCRMStore } from "@/lib/store/useCRMStore";
+import { dialLead } from "@/lib/utils/dial";
 import { getEmployeesAction } from "@/lib/actions/crm.actions";
 import { Button, Badge, Modal, Select, Textarea } from "@/components/ui";
 
@@ -155,7 +156,7 @@ const WHATSAPP_TEMPLATES = [
 
 export default function LeadDetailPage({ params }: PageProps) {
   const router = useRouter();
-  const { startCall, user, webrtcStatus } = useCRMStore();
+  const { user, webrtcStatus } = useCRMStore();
   const { id } = use(params);
 
   const [lead, setLead] = useState<Lead | null>(null);
@@ -321,7 +322,7 @@ export default function LeadDetailPage({ params }: PageProps) {
             className="bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
             disabled={webrtcStatus !== "ready"}
             title={webrtcStatus === "ready" ? undefined : "Click-to-Call not ready"}
-            onClick={() => webrtcStatus === "ready" && startCall(lead.id, lead.name, lead.phone)}
+            onClick={() => webrtcStatus === "ready" && dialLead(lead.id, lead.name)}
           >
             <PhoneCall className="w-4 h-4" /> Start Call
           </Button>

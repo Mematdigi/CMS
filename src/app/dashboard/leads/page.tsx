@@ -58,6 +58,7 @@ export interface Lead {
 }
 import { exportToCSV, exportToExcel } from "@/lib/exports";
 import { useCRMStore } from "@/lib/store/useCRMStore";
+import { dialLead } from "@/lib/utils/dial";
 import { getEmployeesAction } from "@/lib/actions/crm.actions";
 import { Button, Card, Badge, Input, Select, Textarea, Modal, PageHeader, EmptyState } from "@/components/ui";
 
@@ -84,7 +85,7 @@ const leadFormSchema = zod.object({
 type LeadFormValues = zod.infer<typeof leadFormSchema>;
 
 export default function LeadsPage() {
-  const { startCall, user, webrtcStatus } = useCRMStore();
+  const { user, webrtcStatus } = useCRMStore();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -536,7 +537,7 @@ export default function LeadsPage() {
                           <motion.button
                             whileHover={webrtcStatus === "ready" ? { scale: 1.1 } : undefined}
                             whileTap={webrtcStatus === "ready" ? { scale: 0.9 } : undefined}
-                            onClick={() => webrtcStatus === "ready" && startCall(lead.id, lead.name, lead.phone)}
+                            onClick={() => webrtcStatus === "ready" && dialLead(lead.id, lead.name)}
                             disabled={webrtcStatus !== "ready"}
                             className="p-1.5 hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 rounded-lg border border-transparent hover:border-indigo-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                             title={webrtcStatus === "ready" ? "Click-to-Call" : "Click-to-Call not ready"}
