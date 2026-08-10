@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, use, useCallback } from "react";
+import React, { useState, useEffect, use, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -84,6 +84,17 @@ interface Employee {
   role: string;
 }
 
+// A lead updated well after it was first created had a real second touch
+// (e.g. the same customer adding to cart / buying again) rather than just
+// the immediate writes from its own creation.
+const REENGAGEMENT_WINDOW_MS = 10 * 60 * 1000;
+function isReengaged(lead: { createdAt?: string | Date | null; updatedAt?: string | Date | null }): boolean {
+  if (!lead.createdAt || !lead.updatedAt) return false;
+  const created = new Date(lead.createdAt).getTime();
+  const updated = new Date(lead.updatedAt).getTime();
+  return updated - created > REENGAGEMENT_WINDOW_MS;
+}
+
 interface CallLogData {
   id: string;
   leadId: string;
@@ -161,6 +172,13 @@ export default function LeadDetailPage({ params }: PageProps) {
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [activities, setActivities] = useState<LeadActivity[]>([]);
+  // Each merged note block is one separate storefront/manual touch on this
+  // contact — counting them tells an agent how many times this person has
+  // come back, at a glance, without reading the full timeline.
+  const visitCount = useMemo(() => {
+    if (!lead?.notes) return 0;
+    return lead.notes.split(/\n\n+/).filter((block) => block.trim()).length;
+  }, [lead?.notes]);
   const [newNote, setNewNote] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
@@ -361,8 +379,20 @@ export default function LeadDetailPage({ params }: PageProps) {
                       {lead.name.charAt(0)}
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-foreground">{lead.name}</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-foreground">{lead.name}</h2>
+                        {isReengaged(lead) && (
+                          <Badge tone="emerald" className="text-[9px]" title="This contact came back and did something new after their first touch">
+                            Returning Customer
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{lead.company}</p>
+                      {visitCount > 1 && (
+                        <p className="text-2xs text-indigo-500 font-semibold mt-1">
+                          {visitCount} visits/touches on record — same rep has owned this contact throughout
+                        </p>
+                      )}
                     </div>
                   </div>
 
