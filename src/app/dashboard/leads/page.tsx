@@ -84,6 +84,17 @@ const leadFormSchema = zod.object({
 
 type LeadFormValues = zod.infer<typeof leadFormSchema>;
 
+// A lead updated well after it was first created had a real second touch
+// (e.g. an existing customer adding to cart / buying again) rather than
+// just the immediate status writes from its own creation.
+const REENGAGEMENT_WINDOW_MS = 10 * 60 * 1000;
+function isReengaged(lead: Pick<Lead, "createdAt" | "updatedAt">): boolean {
+  if (!lead.createdAt || !lead.updatedAt) return false;
+  const created = new Date(lead.createdAt).getTime();
+  const updated = new Date(lead.updatedAt).getTime();
+  return updated - created > REENGAGEMENT_WINDOW_MS;
+}
+
 export default function LeadsPage() {
   const { user, webrtcStatus } = useCRMStore();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -150,15 +161,20 @@ export default function LeadsPage() {
     },
   });
 
-  // Fetch leads on mount / query state change
+  // Fetch leads on mount / query state change.
+  // Kanban shows the whole pipeline at once (not paginated), and sorts by
+  // updatedAt so a lead that just had fresh activity (e.g. an existing
+  // customer adding to cart again) surfaces near the top of its column
+  // instead of staying buried behind newly-created leads.
   const fetchLeads = useCallback(() => {
+    const isKanban = viewMode === "kanban";
     const params = new URLSearchParams({
       search,
       status: statusFilter,
-      sortBy: "createdAt",
+      sortBy: isKanban ? "updatedAt" : "createdAt",
       sortOrder: "desc",
-      page: String(page),
-      limit: "8",
+      page: String(isKanban ? 1 : page),
+      limit: isKanban ? "500" : "8",
     });
     fetch(`/api/leads?${params.toString()}`)
       .then((res) => res.json())
@@ -170,7 +186,7 @@ export default function LeadsPage() {
         }
       })
       .catch(() => {});
-  }, [search, statusFilter, page]);
+  }, [search, statusFilter, page, viewMode]);
 
   useEffect(() => {
     fetchLeads();
@@ -621,10 +637,15 @@ export default function LeadsPage() {
                       onClick={() => (window.location.href = `/dashboard/leads/${lead.id}`)}
                       className="bg-card border border-border hover:border-indigo-500 p-4 rounded-xl shadow-xs cursor-pointer hover:shadow-md transition-shadow space-y-3"
                     >
-                      <div className="flex justify-between items-start">
+                      <div className="flex justify-between items-start gap-1">
                         <Badge tone={lead.priority === "CRITICAL" ? "red" : lead.priority === "HIGH" ? "amber" : "indigo"} className="text-[9px]">
                           {lead.priority}
                         </Badge>
+                        {isReengaged(lead) && (
+                          <Badge tone="emerald" className="text-[9px]" title="This contact came back and did something new since their first touch">
+                            Returning
+                          </Badge>
+                        )}
                       </div>
                       <div>
                         <div className="font-bold text-xs text-foreground truncate">{lead.name}</div>
