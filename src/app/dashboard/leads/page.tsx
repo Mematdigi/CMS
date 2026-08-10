@@ -20,6 +20,7 @@ import {
   FolderOpen,
   Phone,
   Radio,
+  Repeat,
 } from "lucide-react";
 
 interface Employee {
@@ -105,6 +106,9 @@ export default function LeadsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  // When on, pulls the full pipeline and shows only leads that came back for
+  // a second touch, so a repeat customer doesn't get lost among 100+ leads.
+  const [returningOnly, setReturningOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -165,16 +169,19 @@ export default function LeadsPage() {
   // Kanban shows the whole pipeline at once (not paginated), and sorts by
   // updatedAt so a lead that just had fresh activity (e.g. an existing
   // customer adding to cart again) surfaces near the top of its column
-  // instead of staying buried behind newly-created leads.
+  // instead of staying buried behind newly-created leads. "Returning only"
+  // needs the same full, updatedAt-sorted batch — it's filtered down to
+  // re-engaged leads client-side after the fetch — so a repeat customer is
+  // findable without scrolling every lead looking for a familiar name.
   const fetchLeads = useCallback(() => {
-    const isKanban = viewMode === "kanban";
+    const wantsFullBatch = viewMode === "kanban" || returningOnly;
     const params = new URLSearchParams({
       search,
       status: statusFilter,
-      sortBy: isKanban ? "updatedAt" : "createdAt",
+      sortBy: wantsFullBatch ? "updatedAt" : "createdAt",
       sortOrder: "desc",
-      page: String(isKanban ? 1 : page),
-      limit: isKanban ? "500" : "8",
+      page: String(wantsFullBatch ? 1 : page),
+      limit: wantsFullBatch ? "500" : "8",
     });
     fetch(`/api/leads?${params.toString()}`)
       .then((res) => res.json())
@@ -186,7 +193,11 @@ export default function LeadsPage() {
         }
       })
       .catch(() => {});
-  }, [search, statusFilter, page, viewMode]);
+  }, [search, statusFilter, page, viewMode, returningOnly]);
+
+  // What actually renders: the fetched batch, narrowed to re-engaged leads
+  // when the "Returning" filter is on.
+  const displayedLeads = returningOnly ? leads.filter(isReengaged) : leads;
 
   useEffect(() => {
     fetchLeads();
@@ -387,6 +398,17 @@ export default function LeadsPage() {
               </option>
             ))}
           </Select>
+          <button
+            onClick={() => setReturningOnly((v) => !v)}
+            title="Show only leads that came back for a second touch"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold whitespace-nowrap transition-all ${
+              returningOnly
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+                : "bg-transparent border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Repeat className="w-3.5 h-3.5" /> Returning Only
+          </button>
         </div>
 
         {/* Layout Mode Switcher */}
@@ -475,9 +497,9 @@ export default function LeadsPage() {
                   <th className="p-4 w-12 text-center">
                     <input
                       type="checkbox"
-                      checked={selectedLeads.length === leads.length && leads.length > 0}
+                      checked={selectedLeads.length === displayedLeads.length && displayedLeads.length > 0}
                       onChange={(e) =>
-                        setSelectedLeads(e.target.checked ? leads.map((l) => l.id) : [])
+                        setSelectedLeads(e.target.checked ? displayedLeads.map((l) => l.id) : [])
                       }
                       className="rounded accent-indigo-500 border-border"
                     />
@@ -491,18 +513,18 @@ export default function LeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {leads.length === 0 ? (
+                {displayedLeads.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-2">
                       <EmptyState
                         icon={FolderOpen}
-                        title="No pipeline leads found"
-                        description="Try adjusting your search or filter rules."
+                        title={returningOnly ? "No returning customers found" : "No pipeline leads found"}
+                        description={returningOnly ? "No lead has come back for a second touch yet." : "Try adjusting your search or filter rules."}
                       />
                     </td>
                   </tr>
                 ) : (
-                  leads.map((lead, idx) => (
+                  displayedLeads.map((lead, idx) => (
                     <motion.tr
                       key={lead.id}
                       initial={{ opacity: 0, y: 8 }}
@@ -525,9 +547,16 @@ export default function LeadsPage() {
                         />
                       </td>
                       <td className="p-4">
-                        <div className="font-bold text-foreground hover:underline cursor-pointer"
-                             onClick={() => (window.location.href = `/dashboard/leads/${lead.id}`)}>
-                          {lead.name}
+                        <div className="flex items-center gap-1.5">
+                          <div className="font-bold text-foreground hover:underline cursor-pointer"
+                               onClick={() => (window.location.href = `/dashboard/leads/${lead.id}`)}>
+                            {lead.name}
+                          </div>
+                          {isReengaged(lead) && (
+                            <Badge tone="emerald" className="text-[9px]" title="Came back for a second touch">
+                              Returning
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">{lead.email}</div>
                         <div className="text-[10px] text-indigo-400 mt-1 font-semibold">{lead.phone}</div>
@@ -579,7 +608,11 @@ export default function LeadsPage() {
           </div>
 
           {/* Pagination Footer */}
-          {totalPages > 1 && (
+          {returningOnly ? (
+            <div className="p-4 border-t border-border text-xs font-semibold text-muted-foreground">
+              <span>{displayedLeads.length} returning customer{displayedLeads.length === 1 ? "" : "s"} found (out of {totalCount} total leads)</span>
+            </div>
+          ) : totalPages > 1 && (
             <div className="p-4 border-t border-border flex justify-between items-center text-xs font-semibold text-muted-foreground">
               <span>Showing page {page} of {totalPages} ({totalCount} total leads)</span>
               <div className="flex items-center gap-2">
@@ -609,7 +642,7 @@ export default function LeadsPage() {
         /* Kanban Board view */
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 overflow-x-auto pb-4">
           {["NEW", "CONTACTED", "INTERESTED", "QUALIFIED", "WON"].map((stage, colIdx) => {
-            const stageLeads = leads.filter((l) => l.status === stage);
+            const stageLeads = displayedLeads.filter((l) => l.status === stage);
             return (
               <motion.div
                 key={stage}
